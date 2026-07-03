@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PICKEO POR PASILLO</title>
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        body { background-color: #f3f4f6; touch-action: manipulation; user-select: none; }
+        .btn-rf { @apply w-full py-5 text-2xl font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-3; }
+        .btn-primary { @apply bg-blue-600 text-white active:bg-blue-800; }
+        .btn-success { @apply bg-green-600 text-white active:bg-green-800; }
+        .btn-danger { @apply bg-red-600 text-white active:bg-red-800; }
+        .btn-warning { @apply bg-yellow-500 text-white active:bg-yellow-700; }
+        .card-rf { @apply bg-white p-6 rounded-2xl shadow-xl border-2 border-gray-200; }
+        .dashboard-card { @apply bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center items-center; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // ==========================================
+        // CONFIGURACIÓN API
+        // ==========================================
+        const API_URL = "https://script.google.com/macros/s/AKfycbzk9wxq9iEMP6Aly5Uo2fnAlI-brPARlTm8kRHGdbfoiJD2XpCXYMLX6gdtd1k2-zYWFA/exec"; 
+
+        const apiCall = async (action, payload = {}) => {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action, ...payload }),
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+            });
+            return await response.json();
+        };
+
+        const hashPassword = (pwd) => CryptoJS.SHA256(pwd).toString();
+        
+        const copyToClipboard = (text) => {
+            let textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed"; textArea.style.left = "-999999px"; textArea.style.top = "-999999px";
+            document.body.appendChild(textArea); textArea.focus(); textArea.select();
+            try { document.execCommand('copy'); } catch (err) {}
+            textArea.remove();
+        };
+
+        // ==========================================
+        // VISTAS RF
+        // ==========================================
+        const LoginScreen = ({ onLogin }) => {
+            const [numEmpleado, setNumEmpleado] = React.useState('');
+            const [password, setPassword] = React.useState('');
+            const [loading, setLoading] = React.useState(false);
+            const [error, setError] = React.useState('');
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true); setError('');
+                try {
+                    const res = await apiCall('login', { numEmpleado, passwordHash: hashPassword(password) });
+                    if (res.success) onLogin(res.user); else setError(res.message);
+                } catch (err) { setError('Error de conexión.'); }
+                setLoading(false);
+            };
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4 bg-gray-900">
+                    <form onSubmit={handleSubmit} className="card-rf w-full max-w-md bg-white">
+                        <div className="text-center mb-8">
+                            <i className="ph ph-package text-6xl text-blue-600 mb-2"></i>
+                            <h1 className="text-3xl font-black text-gray-800">WMS PICKEO</h1>
+                        </div>
+                        {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 font-bold text-center">{error}</div>}
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-gray-700 text-xl font-bold mb-2">NO. EMPLEADO</label>
+                                <input type="number" className="w-full text-3xl p-4 border-2 border-gray-300 rounded-xl focus:border-blue-500 outline-none" value={numEmpleado} onChange={(e) => setNumEmpleado(e.target.value)} autoFocus />
+                            </div>
+                            <div>
+                                <label className="block text-gray-700 text-xl font-bold mb-2">CONTRASEÑA</label>
+                                <input type="password" className="w-full text-3xl p-4 border-2 border-gray-300 rounded-xl focus:border-blue-500 outline-none" value={password} onChange={(e) => setPassword(e.target.value)} />
+                            </div>
+                            <button type="submit" disabled={loading} className={`btn-rf btn-primary mt-8 ${loading ? 'opacity-50' : ''}`}>
+                                {loading ? 'CONECTANDO...' : 'INGRESAR'} <i className="ph ph-sign-in"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        };
+
+        const AisleSelector = ({ onSelect, onLogout }) => {
+            const [pasillo, setPasillo] = React.useState('');
+            return (
+                <div className="min-h-screen flex flex-col p-4 bg-gray-100">
+                    <div className="flex justify-between items-center mb-8">
+                        <h2 className="text-2xl font-bold">SELECCIONAR ÁREA</h2>
+                        <button onClick={onLogout} className="p-3 bg-red-100 text-red-700 rounded-lg"><i className="ph ph-power text-2xl"></i></button>
+                    </div>
+                    <div className="flex-1 flex flex-col justify-center">
+                        <div className="card-rf text-center">
+                            <label className="block text-gray-600 font-bold text-2xl mb-4">ESCANEAR PASILLO</label>
+                            <input type="text" className="w-full text-5xl font-black text-center p-6 border-4 border-gray-300 rounded-xl uppercase mb-8 outline-none" value={pasillo} onChange={(e) => setPasillo(e.target.value.toUpperCase())} autoFocus />
+                            <button onClick={() => pasillo && onSelect(pasillo)} className={`btn-rf btn-success ${!pasillo ? 'opacity-50' : ''}`}>
+                                INICIAR PICKEO <i className="ph ph-arrow-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const PickerView = ({ user, pasillo, initialDelivery, onExitAisle }) => {
+            const [delivery, setDelivery] = React.useState(initialDelivery);
+            const [loading, setLoading] = React.useState(false);
+            const [copied, setCopied] = React.useState(false);
+            const [stats, setStats] = React.useState({ entregas: 0, umbs: 0 });
+
+            const fetchStats = async () => {
+                try {
+                    const res = await apiCall('getPickerStats', { numEmpleado: user.numEmpleado });
+                    if (res.success) setStats(res.stats);
+                } catch(e) {}
+            };
+
+            const fetchNext = async () => {
+                setLoading(true); setCopied(false);
+                try {
+                    const res = await apiCall('getNextDelivery', { pasillo, numEmpleado: user.numEmpleado });
+                    if (res.success) {
+                        setDelivery(res.delivery);
+                        localStorage.setItem('rf_current_delivery', JSON.stringify(res.delivery));
+                    } else {
+                        alert(res.message); setDelivery(null); localStorage.removeItem('rf_current_delivery');
+                    }
+                } catch (e) { alert("Error de red."); }
+                setLoading(false);
+            };
+
+            const handleCopy = () => { if(delivery) { copyToClipboard(delivery.entrega); setCopied(true); } };
+
+            const handleNext = async () => {
+                if(delivery) {
+                    setLoading(true);
+                    try {
+                        await apiCall('completeDelivery', { numEmpleado: user.numEmpleado, ...delivery });
+                        await fetchStats();
+                        await fetchNext();
+                    } catch (e) { alert("Error guardando progreso."); setLoading(false); }
+                }
+            };
+
+            const handleFinishAndExit = async () => {
+                if(delivery) {
+                    setLoading(true);
+                    try {
+                        await apiCall('completeDelivery', { numEmpleado: user.numEmpleado, ...delivery });
+                        onExitAisle(); 
+                    } catch (e) { alert("Error al finalizar."); setLoading(false); }
+                }
+            };
+
+            React.useEffect(() => { 
+                fetchStats();
+                if(!delivery) fetchNext(); 
+            }, []);
+
+            if (loading && !delivery) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-100 flex-col">
+                        <i className="ph ph-spinner ph-spin text-6xl text-blue-600 mb-4"></i>
+                        <h2 className="text-2xl font-bold text-gray-600">BUSCANDO ENTREGAS...</h2>
+                    </div>
+                );
+            }
+
+            if (!delivery) {
+                return (
+                    <div className="min-h-screen flex flex-col p-4 bg-gray-100 justify-center">
+                        <div className="card-rf text-center bg-green-50 border-green-200 border-4">
+                            <i className="ph ph-check-circle text-8xl text-green-500 mb-4"></i>
+                            <h2 className="text-4xl font-black text-green-700 mb-4">PASILLO LIMPIO</h2>
+                            <p className="text-xl text-gray-600 mb-8">No hay entregas pendientes en {pasillo}.</p>
+                            <button onClick={fetchNext} className="btn-rf btn-primary mb-4"><i className="ph ph-arrows-clockwise"></i> ACTUALIZAR</button>
+                            <button onClick={onExitAisle} className="btn-rf btn-warning"><i className="ph ph-swap"></i> CAMBIAR PASILLO</button>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen flex flex-col bg-gray-100">
+                    <div className="bg-gray-800 text-white p-3 flex justify-between items-center shadow-md">
+                        <div>
+                            <div className="text-xl font-bold">PASILLO: <span className="text-yellow-400 text-2xl">{pasillo}</span></div>
+                            <div className="text-sm text-gray-300 mt-1">
+                                Turno: <span className="font-bold text-green-400">{stats.entregas}</span> Entregas | <span className="font-bold text-blue-400">{stats.umbs}</span> UMB
+                            </div>
+                        </div>
+                        <button onClick={onExitAisle} className="bg-gray-600 px-3 py-2 rounded text-sm font-bold">SALIR</button>
+                    </div>
+
+                    <div className="flex-1 p-4 flex flex-col justify-center gap-4">
+                        <div className="card-rf bg-blue-50 border-blue-200 border-4 relative">
+                            <div className="text-sm text-blue-800 font-bold mb-1">ENTREGA</div>
+                            <div className="text-5xl font-black text-blue-900 tracking-wider text-center">{delivery.entrega}</div>
+                            {copied && <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded font-bold animate-pulse">COPIADO!</div>}
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="card-rf text-center bg-yellow-50 border-yellow-200 border-4 p-4">
+                                <div className="text-sm text-yellow-800 font-bold mb-1">BAHÍA</div>
+                                <div className="text-5xl font-black text-yellow-900">{delivery.bahia}</div>
+                            </div>
+                            <div className="card-rf text-center bg-purple-50 border-purple-200 border-4 p-4">
+                                <div className="text-sm text-purple-800 font-bold mb-1">CANTIDAD</div>
+                                <div className="text-5xl font-black text-purple-900">{delivery.ctdUMB} <span className="text-lg">UMB</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-4 bg-white border-t-2 border-gray-200 flex flex-col gap-3">
+                        {!copied ? (
+                            <button onClick={handleCopy} className="btn-rf btn-primary py-6 text-2xl">
+                                <i className="ph ph-copy"></i> COPIAR ENTREGA
+                            </button>
+                        ) : (
+                            <>
+                                <button onClick={handleNext} disabled={loading} className={`btn-rf btn-success py-6 text-2xl ${loading ? 'opacity-50' : ''}`}>
+                                    {loading ? <i className="ph ph-spinner ph-spin"></i> : <i className="ph ph-check-square-offset"></i>} 
+                                    SIGUIENTE ENTREGA
+                                </button>
+                                <button onClick={handleFinishAndExit} disabled={loading} className={`btn-rf bg-gray-800 text-white py-4 text-xl ${loading ? 'opacity-50' : ''}`}>
+                                    <i className="ph ph-flag-checkered"></i> FINALIZAR TURNO
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // VISTAS SUPERUSUARIO (DASHBOARD Y USUARIOS)
+        // ==========================================
+        const UserManagement = () => {
+            const [users, setUsers] = React.useState([]);
+            const [loading, setLoading] = React.useState(true);
+            const [showModal, setShowModal] = React.useState(false);
+            const [editingUser, setEditingUser] = React.useState(null);
+            
+            const [numEmpleado, setNumEmpleado] = React.useState('');
+            const [nombre, setNombre] = React.useState('');
+            const [rol, setRol] = React.useState('Pickeador');
+            const [password, setPassword] = React.useState('');
+
+            const loadUsers = async () => {
+                setLoading(true);
+                try {
+                    const res = await apiCall('getUsers');
+                    if(res.success) setUsers(res.users);
+                } catch(e) {}
+                setLoading(false);
+            };
+
+            React.useEffect(() => { loadUsers(); }, []);
+
+            const handleSave = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                const payload = {
+                    user: { numEmpleado, originalNumEmpleado: editingUser ? editingUser.NumeroEmpleado : null, nombre, rol, passwordHash: password ? hashPassword(password) : null }
+                };
+                try {
+                    const res = await apiCall(editingUser ? 'updateUser' : 'createUser', payload);
+                    if(res.success) { setShowModal(false); loadUsers(); } else alert(res.message);
+                } catch(e) { alert("Error al guardar"); }
+                setLoading(false);
+            };
+
+            const handleToggleStatus = async (numEmp) => {
+                if(!confirm("¿Cambiar el estado de este usuario?")) return;
+                setLoading(true);
+                try { await apiCall('toggleUserStatus', { numEmpleado: numEmp }); loadUsers(); } catch(e) {}
+                setLoading(false);
+            };
+
+            const openModal = (u = null) => {
+                setEditingUser(u); setNumEmpleado(u ? u.NumeroEmpleado : ''); setNombre(u ? u.Nombre : ''); setRol(u ? u.Rol : 'Pickeador'); setPassword(''); setShowModal(true);
+            };
+
+            return (
+                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-gray-700 text-xl">Gestión de Usuarios</h3>
+                        <button onClick={() => openModal()} className="bg-blue-600 text-white px-4 py-2 rounded font-bold flex items-center gap-2">
+                            <i className="ph ph-plus-circle text-xl"></i> Nuevo Usuario
+                        </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-gray-100 text-gray-600 text-sm">
+                                    <th className="p-3 border-b">No. Emp</th><th className="p-3 border-b">Nombre</th>
+                                    <th className="p-3 border-b">Rol</th><th className="p-3 border-b">Estado</th><th className="p-3 border-b text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {users.map((u, idx) => (
+                                    <tr key={idx} className="border-b hover:bg-gray-50">
+                                        <td className="p-3 font-bold">{u.NumeroEmpleado}</td><td className="p-3">{u.Nombre}</td>
+                                        <td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${u.Rol.toUpperCase() === 'SUPERUSUARIO' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{u.Rol}</span></td>
+                                        <td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${u.Activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{u.Activo ? 'ACTIVO' : 'INACTIVO'}</span></td>
+                                        <td className="p-3 text-right flex justify-end gap-2">
+                                            <button onClick={() => openModal(u)} className="p-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"><i className="ph ph-pencil-simple text-lg"></i></button>
+                                            <button onClick={() => handleToggleStatus(u.NumeroEmpleado)} className={`p-2 rounded ${u.Activo ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}><i className={`ph ${u.Activo ? 'ph-x-circle' : 'ph-check-circle'} text-lg`}></i></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    {showModal && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                            <form onSubmit={handleSave} className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl">
+                                <h2 className="text-2xl font-bold mb-4">{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</h2>
+                                <div className="space-y-4">
+                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">No. Empleado</label><input type="number" required value={numEmpleado} onChange={e=>setNumEmpleado(e.target.value)} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">Nombre Completo</label><input type="text" required value={nombre} onChange={e=>setNombre(e.target.value)} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">Rol</label><select value={rol} onChange={e=>setRol(e.target.value)} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"><option value="Pickeador">Pickeador</option><option value="Superusuario">Superusuario</option></select></div>
+                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">Contraseña {editingUser && '(Dejar en blanco para no cambiar)'}</label><input type="password" required={!editingUser} value={password} onChange={e=>setPassword(e.target.value)} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                                </div>
+                                <div className="flex justify-end gap-3 mt-6">
+                                    <button type="button" onClick={()=>setShowModal(false)} className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded">Cancelar</button>
+                                    <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700">{loading ? 'Guardando...' : 'Guardar'}</button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const DashboardView = ({ onLogout }) => {
+            const [data, setData] = React.useState(null);
+            const [loading, setLoading] = React.useState(true);
+            const [activeTab, setActiveTab] = React.useState('dashboard');
+            
+            const chartDonutRef = React.useRef(null);
+            const chartBarRef = React.useRef(null);
+            
+            const donutInstance = React.useRef(null);
+            const barInstance = React.useRef(null);
+
+            const loadData = async () => {
+                setLoading(true);
+                try {
+                    const res = await apiCall('getDashboardData');
+                    if(res.success) setData(res.data);
+                } catch(e) {}
+                setLoading(false);
+            };
+
+            React.useEffect(() => {
+                if(activeTab === 'dashboard') {
+                    loadData();
+                    const interval = setInterval(loadData, 60000);
+                    return () => clearInterval(interval);
+                }
+            }, [activeTab]);
+
+            React.useEffect(() => {
+                // Initialize Donut Chart
+                if(data && chartDonutRef.current && activeTab === 'dashboard') {
+                    if(donutInstance.current) donutInstance.current.destroy();
+                    donutInstance.current = new Chart(chartDonutRef.current.getContext('2d'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Pendientes', 'Asignadas', 'Terminadas'],
+                            datasets: [{ 
+                                data: [data.totales.pendientes, data.totales.asignadas, data.totales.terminadas], 
+                                backgroundColor: ['#ef4444', '#3b82f6', '#22c55e'], 
+                                borderWidth: 0 
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                    });
+                }
+                
+                // Initialize Bar Chart
+                if(data && chartBarRef.current && activeTab === 'dashboard' && data.avancePasillos) {
+                    if(barInstance.current) barInstance.current.destroy();
+                    const pasillosLabels = data.avancePasillos.map(p => p.pasillo);
+                    barInstance.current = new Chart(chartBarRef.current.getContext('2d'), {
+                        type: 'bar',
+                        data: {
+                            labels: pasillosLabels,
+                            datasets: [
+                                { label: 'Terminadas', data: data.avancePasillos.map(p => p.terminadas), backgroundColor: '#22c55e' },
+                                { label: 'Asignadas', data: data.avancePasillos.map(p => p.asignadas), backgroundColor: '#3b82f6' },
+                                { label: 'Pendientes', data: data.avancePasillos.map(p => p.pendientes), backgroundColor: '#ef4444' }
+                            ]
+                        },
+                        options: { 
+                            responsive: true, 
+                            maintainAspectRatio: false, 
+                            scales: { x: { stacked: true }, y: { stacked: true } },
+                            plugins: { legend: { position: 'bottom' } }
+                        }
+                    });
+                }
+            }, [data, activeTab]);
+
+            return (
+                <div className="min-h-screen bg-gray-100 flex flex-col">
+                    <div className="bg-gray-900 text-white p-4 flex justify-between items-center shadow-lg">
+                        <div className="text-xl font-bold flex items-center gap-2">
+                            <i className="ph ph-chart-line-up"></i> CONTROL TOWER WMS
+                        </div>
+                        <button onClick={onLogout} className="bg-red-600 px-4 py-2 rounded text-sm font-bold flex items-center gap-2">
+                            <i className="ph ph-power"></i> SALIR
+                        </button>
+                    </div>
+
+                    <div className="bg-white border-b flex px-6">
+                        <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-3 font-bold border-b-2 ${activeTab === 'dashboard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>
+                            <i className="ph ph-chart-pie-slice mr-2"></i> Dashboard
+                        </button>
+                        <button onClick={() => setActiveTab('usuarios')} className={`px-4 py-3 font-bold border-b-2 ${activeTab === 'usuarios' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>
+                            <i className="ph ph-users mr-2"></i> Gestión de Usuarios
+                        </button>
+                    </div>
+
+                    <div className="p-6 flex-1 overflow-auto">
+                        {activeTab === 'dashboard' ? (
+                            loading && !data ? <div className="text-center p-10">Cargando Dashboard...</div> : (
+                            <>
+                                {/* KPIs */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                                    <div className="dashboard-card border-l-4 border-red-500">
+                                        <div className="text-gray-500 text-sm font-bold">PENDIENTES</div>
+                                        <div className="text-4xl font-black text-gray-800">{data?.totales?.pendientes || 0}</div>
+                                    </div>
+                                    <div className="dashboard-card border-l-4 border-blue-500">
+                                        <div className="text-gray-500 text-sm font-bold">ASIGNADAS</div>
+                                        <div className="text-4xl font-black text-gray-800">{data?.totales?.asignadas || 0}</div>
+                                    </div>
+                                    <div className="dashboard-card border-l-4 border-green-500">
+                                        <div className="text-gray-500 text-sm font-bold">TERMINADAS</div>
+                                        <div className="text-4xl font-black text-gray-800">{data?.totales?.terminadas || 0}</div>
+                                    </div>
+                                    <div className="dashboard-card border-l-4 border-purple-500">
+                                        <div className="text-gray-500 text-sm font-bold">PASILLOS ACTIVOS</div>
+                                        <div className="text-4xl font-black text-gray-800">{data?.totales?.pasillos || 0}</div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    {/* Gráfico Donut */}
+                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 col-span-1 h-80 flex flex-col">
+                                        <h3 className="font-bold text-gray-700 mb-4">Estado Global</h3>
+                                        <div className="relative flex-1">
+                                            <canvas ref={chartDonutRef}></canvas>
+                                        </div>
+                                    </div>
+
+                                    {/* Gráfico de Barras por Pasillo */}
+                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 col-span-2 h-80 flex flex-col">
+                                        <h3 className="font-bold text-gray-700 mb-4">Avance por Pasillo</h3>
+                                        <div className="relative flex-1">
+                                            <canvas ref={chartBarRef}></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-1 gap-6 mt-6">
+                                    {/* Ranking Pickers */}
+                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                                        <h3 className="font-bold text-gray-700 mb-4">Top 10 Pickers (Terminadas)</h3>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left">
+                                                <thead>
+                                                    <tr className="bg-gray-50 text-gray-600 text-sm">
+                                                        <th className="p-3 rounded-tl-lg">#</th>
+                                                        <th className="p-3">Empleado</th>
+                                                        <th className="p-3 text-right">Entregas</th>
+                                                        <th className="p-3 text-right rounded-tr-lg">Total UMB</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {data?.topPickers?.map((p, idx) => (
+                                                        <tr key={idx} className="border-b border-gray-50">
+                                                            <td className="p-3 font-bold text-gray-400">{idx+1}</td>
+                                                            <td className="p-3 font-semibold text-gray-800">{p.user}</td>
+                                                            <td className="p-3 text-right font-bold text-blue-600">{p.entregas}</td>
+                                                            <td className="p-3 text-right text-purple-600">{p.umbs}</td>
+                                                        </tr>
+                                                    ))}
+                                                    {(!data?.topPickers || data?.topPickers.length === 0) && <tr><td colSpan="4" className="text-center p-4 text-gray-500">Sin datos de productividad</td></tr>}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    {/* Avance por Supervisor */}
+                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                                        <h3 className="font-bold text-gray-700 mb-4">Avance por Supervisor</h3>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left">
+                                                <thead>
+                                                    <tr className="bg-gray-50 text-gray-600 text-sm">
+                                                        <th className="p-3">Supervisor</th>
+                                                        <th className="p-3 text-right">Pendientes</th>
+                                                        <th className="p-3 text-right">Asignadas</th>
+                                                        <th className="p-3 text-right">Terminadas</th>
+                                                        <th className="p-3 text-right text-purple-600">UMB Terminadas</th>
+                                                        <th className="p-3 text-center">Progreso</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {data?.avanceSupervisores?.map((s, idx) => {
+                                                        const percent = s.total > 0 ? Math.round((s.terminadas / s.total) * 100) : 0;
+                                                        return (
+                                                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50">
+                                                            <td className="p-3 font-semibold text-gray-800">{s.supervisor}</td>
+                                                            <td className="p-3 text-right text-red-500 font-bold">{s.pendientes}</td>
+                                                            <td className="p-3 text-right text-blue-500 font-bold">{s.asignadas}</td>
+                                                            <td className="p-3 text-right text-green-500 font-bold">{s.terminadas}</td>
+                                                            <td className="p-3 text-right text-purple-600 font-bold">{s.umbs}</td>
+                                                            <td className="p-3">
+                                                                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                                                  <div className="bg-green-500 h-2.5 rounded-full" style={{width: `${percent}%`}}></div>
+                                                                </div>
+                                                                <div className="text-xs text-center mt-1 text-gray-500">{percent}% completado</div>
+                                                            </td>
+                                                        </tr>
+                                                    )})}
+                                                    {(!data?.avanceSupervisores || data?.avanceSupervisores.length === 0) && <tr><td colSpan="6" className="text-center p-4 text-gray-500">Sin datos de supervisores</td></tr>}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                            )
+                        ) : (
+                            <UserManagement />
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [user, setUser] = React.useState(null);
+            const [pasillo, setPasillo] = React.useState(null);
+            const [delivery, setDelivery] = React.useState(null);
+            const [init, setInit] = React.useState(false);
+
+            React.useEffect(() => {
+                if(localStorage.getItem('rf_user')) setUser(JSON.parse(localStorage.getItem('rf_user')));
+                if(localStorage.getItem('rf_pasillo')) setPasillo(localStorage.getItem('rf_pasillo'));
+                if(localStorage.getItem('rf_current_delivery')) setDelivery(JSON.parse(localStorage.getItem('rf_current_delivery')));
+                setInit(true);
+            }, []);
+
+            const handleLogin = (u) => { setUser(u); localStorage.setItem('rf_user', JSON.stringify(u)); };
+            const handleLogout = () => { setUser(null); setPasillo(null); setDelivery(null); localStorage.clear(); };
+            const handleSelectPasillo = (p) => { setPasillo(p); localStorage.setItem('rf_pasillo', p); };
+            const handleExitPasillo = () => { setPasillo(null); setDelivery(null); localStorage.removeItem('rf_pasillo'); localStorage.removeItem('rf_current_delivery'); };
+
+            if (!init) return <div className="min-h-screen bg-gray-900 flex items-center justify-center"><h1 className="text-white font-bold">INICIANDO...</h1></div>;
+            if (!user) return <LoginScreen onLogin={handleLogin} />;
+            if (user.rol.toUpperCase() === 'SUPERUSUARIO' || user.rol.toUpperCase() === 'ADMIN') return <DashboardView onLogout={handleLogout} />;
+            if (!pasillo) return <AisleSelector onSelect={handleSelectPasillo} onLogout={handleLogout} />;
+            return <PickerView user={user} pasillo={pasillo} initialDelivery={delivery} onExitAisle={handleExitPasillo} />;
+        };
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
