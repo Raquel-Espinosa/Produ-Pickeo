@@ -1,590 +1,1102 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PICKEO POR PASILLO</title>
-    
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Productividad de Picking · CD1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --floor:#1B1D1F;
+    --floor-raised:#232629;
+    --floor-raised-2:#282C2F;
+    --steel:#3A3F44;
+    --steel-light:#4B5157;
+    --paper:#ECE8DE;
+    --paper-dim:#A9A6A0;
+    --paper-faint:#75726C;
+    --safety-yellow:#F5B400;
+    --safety-yellow-dim:#7A5A00;
+    --on-target:#4FA37B;
+    --on-target-bg:rgba(79,163,123,0.14);
+    --warn:#E0A22C;
+    --warn-bg:rgba(224,162,44,0.14);
+    --under-target:#D9694B;
+    --under-target-bg:rgba(217,105,75,0.14);
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--floor);
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 32px 32px;
+    color:var(--paper);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  ::selection{ background:var(--safety-yellow); color:#1B1D1F; }
 
-    <style>
-        body { background-color: #f3f4f6; touch-action: manipulation; user-select: none; }
-        .btn-rf { @apply w-full py-5 text-2xl font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-3; }
-        .btn-primary { @apply bg-blue-600 text-white active:bg-blue-800; }
-        .btn-success { @apply bg-green-600 text-white active:bg-green-800; }
-        .btn-danger { @apply bg-red-600 text-white active:bg-red-800; }
-        .btn-warning { @apply bg-yellow-500 text-white active:bg-yellow-700; }
-        .card-rf { @apply bg-white p-6 rounded-2xl shadow-xl border-2 border-gray-200; }
-        .dashboard-card { @apply bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center items-center; }
-    </style>
+  /* ---------- Header / dock sign ---------- */
+  header.dock{
+    position:sticky; top:0; z-index:40;
+    background:linear-gradient(180deg, #1F2123 0%, #1B1D1F 100%);
+    border-bottom:3px solid var(--safety-yellow);
+    box-shadow:0 6px 18px rgba(0,0,0,0.35);
+  }
+  .dock-inner{
+    max-width:1400px; margin:0 auto;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 24px; gap:16px; flex-wrap:wrap;
+  }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .brand-mark{
+    width:44px; height:44px; flex:0 0 auto;
+    background:var(--safety-yellow); border-radius:2px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Oswald',sans-serif; font-weight:700; font-size:18px;
+    color:#1B1D1F; letter-spacing:-0.5px;
+    transform:skewX(-6deg);
+  }
+  .brand-mark span{ display:inline-block; transform:skewX(6deg); }
+  .brand-text h1{
+    font-family:'Oswald',sans-serif; font-weight:600; font-size:20px;
+    letter-spacing:0.5px; margin:0; text-transform:uppercase;
+  }
+  .brand-text p{
+    margin:2px 0 0; font-size:12px; color:var(--paper-dim);
+    letter-spacing:1.5px; text-transform:uppercase; font-weight:500;
+  }
+  .file-controls{ display:flex; align-items:center; gap:10px; }
+  .btn{
+    font-family:'Inter',sans-serif; font-weight:600; font-size:13px;
+    border:1.5px solid var(--steel-light); background:var(--floor-raised);
+    color:var(--paper); padding:10px 16px; border-radius:var(--radius);
+    cursor:pointer; transition:all .15s ease; letter-spacing:0.2px;
+  }
+  .btn:hover{ border-color:var(--safety-yellow); color:var(--safety-yellow); }
+  .btn-primary{
+    background:var(--safety-yellow); color:#1B1D1F; border-color:var(--safety-yellow);
+  }
+  .btn-primary:hover{ background:#ffc42c; color:#1B1D1F; }
+  .btn:focus-visible, input:focus-visible, select:focus-visible{
+    outline:2px solid var(--safety-yellow); outline-offset:2px;
+  }
+  .file-name{ font-size:12px; color:var(--paper-dim); font-family:'IBM Plex Mono',monospace; max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  input[type=file]{ display:none; }
+  .live-badge{ font-size:11px; font-weight:700; color:var(--on-target); letter-spacing:0.5px; font-family:'IBM Plex Mono',monospace; }
+
+  /* connect panel */
+  .connect-panel{
+    margin-top:40px; max-width:640px; margin-left:auto; margin-right:auto;
+    background:var(--floor-raised); border:1px solid var(--steel); border-radius:6px; padding:32px;
+  }
+  .connect-panel h2{
+    font-family:'Oswald',sans-serif; font-size:22px; font-weight:600; margin:0 0 8px;
+    text-transform:uppercase; letter-spacing:0.5px;
+  }
+  .connect-panel p{ color:var(--paper-dim); font-size:13.5px; line-height:1.6; margin:0 0 20px; }
+  .connect-panel ol{ color:var(--paper-dim); font-size:13px; line-height:1.8; margin:0 0 20px; padding-left:20px; }
+  .connect-panel code{
+    background:var(--floor); border:1px solid var(--steel); border-radius:2px; padding:1px 6px;
+    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--safety-yellow);
+  }
+  .connect-field{ margin-bottom:14px; }
+  .connect-field label{ display:block; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--paper-dim); font-weight:600; margin-bottom:6px; }
+  .connect-field input{
+    width:100%; background:var(--floor); border:1.5px solid var(--steel-light); color:var(--paper);
+    padding:10px 12px; border-radius:var(--radius); font-family:'IBM Plex Mono',monospace; font-size:12.5px;
+  }
+  .connect-actions{ display:flex; gap:10px; align-items:center; margin-top:20px; }
+  .connect-back{ background:none; border:none; color:var(--paper-faint); font-size:12.5px; cursor:pointer; text-decoration:underline; }
+
+  main{ max-width:1400px; margin:0 auto; padding:28px 24px 80px; }
+
+  /* ---------- Empty state / dropzone ---------- */
+  .dropzone{
+    margin-top:40px;
+    border:2px dashed var(--steel-light);
+    border-radius:6px;
+    padding:80px 24px;
+    text-align:center;
+    background:repeating-linear-gradient(135deg, rgba(245,180,0,0.02) 0 12px, transparent 12px 24px);
+    transition:border-color .2s ease, background .2s ease;
+  }
+  .dropzone.drag{ border-color:var(--safety-yellow); background:rgba(245,180,0,0.05); }
+  .dropzone .icon{
+    font-family:'Oswald',sans-serif; font-size:15px; letter-spacing:3px;
+    color:var(--safety-yellow); text-transform:uppercase; margin-bottom:18px;
+    display:inline-block; border:2px solid var(--safety-yellow); padding:10px 18px;
+    transform:rotate(-1.5deg);
+  }
+  .dropzone h2{
+    font-family:'Oswald',sans-serif; font-size:26px; font-weight:600; margin:0 0 10px;
+    text-transform:uppercase; letter-spacing:0.5px;
+  }
+  .dropzone p{ color:var(--paper-dim); max-width:520px; margin:0 auto 22px; line-height:1.6; font-size:14.5px; }
+  .dropzone .hint{ font-size:12px; color:var(--paper-faint); font-family:'IBM Plex Mono',monospace; margin-top:18px; }
+  #errorBox{
+    display:none; margin-top:18px; padding:12px 16px; border-radius:var(--radius);
+    background:var(--under-target-bg); border:1px solid var(--under-target); color:#f2c8bc;
+    font-size:13px; max-width:600px; margin-left:auto; margin-right:auto; text-align:left;
+  }
+
+  /* ---------- Dashboard ---------- */
+  #dashboard{ display:none; }
+
+  .kpi-row{ display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:14px; margin-bottom:22px; }
+  .kpi-card{
+    background:var(--floor-raised); border:1px solid var(--steel);
+    border-left:4px solid var(--safety-yellow);
+    border-radius:var(--radius); padding:16px 18px;
+  }
+  .kpi-card .label{ font-size:11px; text-transform:uppercase; letter-spacing:1.2px; color:var(--paper-dim); font-weight:600; }
+  .kpi-card .value{ font-family:'Oswald',sans-serif; font-size:30px; font-weight:600; margin-top:6px; line-height:1; }
+  .kpi-card .sub{ font-size:12px; color:var(--paper-faint); margin-top:6px; font-family:'IBM Plex Mono',monospace; }
+  .kpi-card.ok{ border-left-color:var(--on-target); }
+  .kpi-card.warn{ border-left-color:var(--warn); }
+  .kpi-card.bad{ border-left-color:var(--under-target); }
+
+  .panel{
+    background:var(--floor-raised); border:1px solid var(--steel);
+    border-radius:var(--radius); margin-bottom:20px; overflow:hidden;
+  }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+    padding:14px 18px; border-bottom:1px solid var(--steel); background:var(--floor-raised-2);
+  }
+  .panel-head h3{
+    font-family:'Oswald',sans-serif; font-size:15px; text-transform:uppercase; letter-spacing:0.8px;
+    margin:0; font-weight:600;
+  }
+  .panel-body{ padding:18px; }
+
+  /* filters */
+  .filters{ display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--paper-dim); font-weight:600; }
+  select, .field input[type=text]{
+    background:var(--floor); border:1.5px solid var(--steel-light); color:var(--paper);
+    padding:9px 10px; border-radius:var(--radius); font-family:'Inter',sans-serif; font-size:13px;
+    min-width:150px;
+  }
+  select:hover, .field input[type=text]:hover{ border-color:var(--paper-dim); }
+  .field input[type=text]{ font-family:'IBM Plex Mono',monospace; min-width:140px; }
+  .clear-filters{
+    font-size:12px; color:var(--safety-yellow); background:none; border:none; cursor:pointer;
+    text-decoration:underline; padding:9px 4px; font-family:'Inter',sans-serif; font-weight:600;
+  }
+  .coverage-note{ font-size:11.5px; color:var(--paper-faint); margin-top:10px; font-family:'IBM Plex Mono',monospace; }
+
+  /* tabs */
+  .tabs{ display:flex; gap:6px; }
+  .tab-btn{
+    font-family:'Inter',sans-serif; font-weight:600; font-size:12.5px;
+    background:none; border:1.5px solid var(--steel); color:var(--paper-dim);
+    padding:7px 14px; border-radius:var(--radius); cursor:pointer; text-transform:uppercase; letter-spacing:0.5px;
+  }
+  .tab-btn.active{ background:var(--safety-yellow); border-color:var(--safety-yellow); color:#1B1D1F; }
+  .tab-panel{ display:none; }
+  .tab-panel.active{ display:block; }
+
+  /* tables */
+  .table-wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  thead th{
+    text-align:left; font-family:'Inter',sans-serif; font-weight:600; font-size:11px;
+    text-transform:uppercase; letter-spacing:0.8px; color:var(--paper-dim);
+    padding:10px 12px; border-bottom:2px solid var(--steel); white-space:nowrap; cursor:pointer;
+    user-select:none;
+  }
+  thead th:hover{ color:var(--safety-yellow); }
+  thead th .arrow{ font-size:9px; margin-left:3px; opacity:0.6; }
+  tbody td{
+    padding:9px 12px; border-bottom:1px solid rgba(58,63,68,0.5); font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px; white-space:nowrap;
+  }
+  tbody td.txt{ font-family:'Inter',sans-serif; font-size:12.5px; }
+  tbody tr:hover{ background:rgba(245,180,0,0.045); }
+
+  .tag-pasillo{
+    display:inline-flex; flex-direction:column; align-items:center; line-height:1;
+    background:var(--safety-yellow); color:#1B1D1F; border:1.5px solid #1B1D1F;
+    padding:3px 8px 4px; border-radius:2px;
+    clip-path:polygon(0 0, 100% 0, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+    font-family:'Oswald',sans-serif; min-width:34px;
+  }
+  .tag-pasillo .n{ font-size:13px; font-weight:700; }
+  .tag-pasillo .l{ font-size:6px; letter-spacing:0.6px; font-weight:600; }
+  .tag-none{ color:var(--paper-faint); font-family:'IBM Plex Mono',monospace; font-size:12px; }
+
+  .pct-badge{
+    display:inline-flex; align-items:center; gap:6px; font-weight:600; padding:3px 8px;
+    border-radius:12px; font-size:12px;
+  }
+  .pct-badge.ok{ background:var(--on-target-bg); color:var(--on-target); }
+  .pct-badge.warn{ background:var(--warn-bg); color:var(--warn); }
+  .pct-badge.bad{ background:var(--under-target-bg); color:var(--under-target); }
+  .pct-badge.na{ background:rgba(255,255,255,0.05); color:var(--paper-faint); }
+
+  .pagination{ display:flex; align-items:center; justify-content:center; gap:12px; padding:14px 0 4px; }
+  .pagination button{
+    background:var(--floor); border:1px solid var(--steel-light); color:var(--paper);
+    padding:6px 12px; border-radius:var(--radius); cursor:pointer; font-size:12px; font-family:'Inter',sans-serif;
+  }
+  .pagination button:disabled{ opacity:0.35; cursor:not-allowed; }
+  .pagination span{ font-size:12px; color:var(--paper-dim); font-family:'IBM Plex Mono',monospace; }
+
+  .empty-row td{ text-align:center; padding:30px; color:var(--paper-faint); font-family:'Inter',sans-serif; }
+
+  /* hour chart */
+  .chart-wrap{ display:flex; align-items:flex-end; gap:6px; height:170px; padding:10px 4px 0; }
+  .chart-bar-col{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; min-width:0; }
+  .chart-bar{ width:100%; border-radius:2px 2px 0 0; position:relative; min-height:2px; }
+  .chart-bar-label{ font-size:9.5px; color:var(--paper-faint); margin-top:6px; font-family:'IBM Plex Mono',monospace; }
+  .chart-bar-val{ font-size:9.5px; color:var(--paper-dim); margin-bottom:4px; font-family:'IBM Plex Mono',monospace; }
+  .target-line{ position:absolute; left:-4px; right:-4px; border-top:1.5px dashed var(--paper-faint); }
+
+  footer{ max-width:1400px; margin:0 auto; padding:20px 24px 40px; color:var(--paper-faint); font-size:11.5px; font-family:'IBM Plex Mono',monospace; }
+
+  #toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(120%);
+    background:var(--under-target-bg); border:1px solid var(--under-target); color:#f7d9cd;
+    padding:12px 18px; border-radius:var(--radius); font-size:13px; max-width:520px; z-index:100;
+    transition:transform .25s ease; box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  }
+  #toast.show{ transform:translateX(-50%) translateY(0); }
+
+  @media (max-width:640px){
+    .dock-inner{ padding:14px 16px; }
+    main{ padding:20px 14px 60px; }
+    .kpi-card .value{ font-size:24px; }
+  }
+  @media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+</style>
 </head>
 <body>
-    <div id="root"></div>
 
-    <script type="text/babel">
-        // ==========================================
-        // CONFIGURACIÓN API
-        // ==========================================
-        const API_URL = "https://script.google.com/macros/s/AKfycbzk9wxq9iEMP6Aly5Uo2fnAlI-brPARlTm8kRHGdbfoiJD2XpCXYMLX6gdtd1k2-zYWFA/exec"; 
+<header class="dock">
+  <div class="dock-inner">
+    <div class="brand">
+      <div class="brand-mark"><span>PZ</span></div>
+      <div class="brand-text">
+        <h1>Productividad de Picking</h1>
+        <p>CD1 · Petco &nbsp;·&nbsp; Piezas por hora vs. objetivo por pasillo</p>
+      </div>
+    </div>
+    <div class="file-controls">
+      <span class="file-name" id="fileName"></span>
+      <span class="live-badge" id="liveBadge" style="display:none;">&#9679; En vivo</span>
+      <button class="btn" id="refreshBtn" style="display:none;">Actualizar</button>
+      <button class="btn" id="changeFileBtn" style="display:none;">Cambiar fuente</button>
+      <button class="btn btn-primary" id="uploadBtn">Cargar archivo .xlsx</button>
+      <button class="btn" id="connectBtn">Conectar Google Sheets</button>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </div>
+  </div>
+</header>
 
-        const apiCall = async (action, payload = {}) => {
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                body: JSON.stringify({ action, ...payload }),
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-            });
-            return await response.json();
-        };
+<main>
 
-        const hashPassword = (pwd) => CryptoJS.SHA256(pwd).toString();
-        
-        const copyToClipboard = (text) => {
-            let textArea = document.createElement("textarea");
-            textArea.value = text;
-            textArea.style.position = "fixed"; textArea.style.left = "-999999px"; textArea.style.top = "-999999px";
-            document.body.appendChild(textArea); textArea.focus(); textArea.select();
-            try { document.execCommand('copy'); } catch (err) {}
-            textArea.remove();
-        };
+  <div class="dropzone" id="dropzone">
+    <span class="icon">Zona de carga</span>
+    <h2>Suelta aquí el archivo de la hoja</h2>
+    <p>Sube el Excel exportado de "Productividad por hr" (hojas <strong>Base</strong> y <strong>Objetivo</strong>). Todo el cálculo corre en tu navegador — el archivo no se sube a ningún servidor.</p>
+    <button class="btn btn-primary" id="dropzoneBtn">Elegir archivo</button>
+    <div class="hint">Formatos aceptados: .xlsx / .xls</div>
+    <div id="errorBox"></div>
+  </div>
 
-        // ==========================================
-        // VISTAS RF
-        // ==========================================
-        const LoginScreen = ({ onLogin }) => {
-            const [numEmpleado, setNumEmpleado] = React.useState('');
-            const [password, setPassword] = React.useState('');
-            const [loading, setLoading] = React.useState(false);
-            const [error, setError] = React.useState('');
+  <div class="connect-panel" id="connectPanel" style="display:none;">
+    <h2>Conectar Google Sheets</h2>
+    <p>La app puede leer la hoja directamente por internet, sin que tengas que exportar el archivo cada vez. Solo necesitas los enlaces CSV de las hojas <strong>Base</strong> y <strong>Objetivo</strong>:</p>
+    <ol>
+      <li>En Google Sheets: <strong>Compartir</strong> → activa "Cualquier persona con el enlace" como <strong>Lector</strong>.</li>
+      <li>Abre la pestaña de la hoja <strong>Base</strong> y copia el número después de <code>#gid=</code> en la URL.</li>
+      <li>Pega abajo: <code>https://docs.google.com/spreadsheets/d/TU_ID/export?format=csv&amp;gid=EL_GID</code></li>
+      <li>Repite con la pestaña <strong>Objetivo</strong> (tendrá otro gid).</li>
+    </ol>
+    <div class="connect-field">
+      <label for="urlBase">URL CSV de la hoja "Base"</label>
+      <input type="text" id="urlBase" placeholder="https://docs.google.com/spreadsheets/d/…/export?format=csv&gid=0">
+    </div>
+    <div class="connect-field">
+      <label for="urlObjetivo">URL CSV de la hoja "Objetivo"</label>
+      <input type="text" id="urlObjetivo" placeholder="https://docs.google.com/spreadsheets/d/…/export?format=csv&gid=123456">
+    </div>
+    <div id="connectError" style="display:none; color:#f2c8bc; background:var(--under-target-bg); border:1px solid var(--under-target); border-radius:var(--radius); padding:10px 14px; font-size:13px; margin-bottom:10px;"></div>
+    <div class="connect-actions">
+      <button class="btn btn-primary" id="connectSubmit">Conectar y cargar</button>
+      <button class="connect-back" id="connectBack">Volver a subir archivo</button>
+    </div>
+  </div>
 
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                setLoading(true); setError('');
-                try {
-                    const res = await apiCall('login', { numEmpleado, passwordHash: hashPassword(password) });
-                    if (res.success) onLogin(res.user); else setError(res.message);
-                } catch (err) { setError('Error de conexión.'); }
-                setLoading(false);
-            };
+  <div id="dashboard">
 
-            return (
-                <div className="min-h-screen flex items-center justify-center p-4 bg-gray-900">
-                    <form onSubmit={handleSubmit} className="card-rf w-full max-w-md bg-white">
-                        <div className="text-center mb-8">
-                            <i className="ph ph-package text-6xl text-blue-600 mb-2"></i>
-                            <h1 className="text-3xl font-black text-gray-800">WMS PICKEO</h1>
-                        </div>
-                        {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 font-bold text-center">{error}</div>}
-                        <div className="space-y-6">
-                            <div>
-                                <label className="block text-gray-700 text-xl font-bold mb-2">NO. EMPLEADO</label>
-                                <input type="number" className="w-full text-3xl p-4 border-2 border-gray-300 rounded-xl focus:border-blue-500 outline-none" value={numEmpleado} onChange={(e) => setNumEmpleado(e.target.value)} autoFocus />
-                            </div>
-                            <div>
-                                <label className="block text-gray-700 text-xl font-bold mb-2">CONTRASEÑA</label>
-                                <input type="password" className="w-full text-3xl p-4 border-2 border-gray-300 rounded-xl focus:border-blue-500 outline-none" value={password} onChange={(e) => setPassword(e.target.value)} />
-                            </div>
-                            <button type="submit" disabled={loading} className={`btn-rf btn-primary mt-8 ${loading ? 'opacity-50' : ''}`}>
-                                {loading ? 'CONECTANDO...' : 'INGRESAR'} <i className="ph ph-sign-in"></i>
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            );
-        };
+    <div class="kpi-row" id="kpiRow"></div>
 
-        const AisleSelector = ({ onSelect, onLogout }) => {
-            const [pasillo, setPasillo] = React.useState('');
-            return (
-                <div className="min-h-screen flex flex-col p-4 bg-gray-100">
-                    <div className="flex justify-between items-center mb-8">
-                        <h2 className="text-2xl font-bold">SELECCIONAR ÁREA</h2>
-                        <button onClick={onLogout} className="p-3 bg-red-100 text-red-700 rounded-lg"><i className="ph ph-power text-2xl"></i></button>
-                    </div>
-                    <div className="flex-1 flex flex-col justify-center">
-                        <div className="card-rf text-center">
-                            <label className="block text-gray-600 font-bold text-2xl mb-4">ESCANEAR PASILLO</label>
-                            <input type="text" className="w-full text-5xl font-black text-center p-6 border-4 border-gray-300 rounded-xl uppercase mb-8 outline-none" value={pasillo} onChange={(e) => setPasillo(e.target.value.toUpperCase())} autoFocus />
-                            <button onClick={() => pasillo && onSelect(pasillo)} className={`btn-rf btn-success ${!pasillo ? 'opacity-50' : ''}`}>
-                                INICIAR PICKEO <i className="ph ph-arrow-right"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Filtros</h3>
+        <button class="clear-filters" id="clearFilters">Limpiar filtros</button>
+      </div>
+      <div class="panel-body">
+        <div class="filters">
+          <div class="field">
+            <label for="fFecha">Fecha</label>
+            <select id="fFecha"><option value="">Todas</option></select>
+          </div>
+          <div class="field">
+            <label for="fSupervisor">Supervisor</label>
+            <select id="fSupervisor"><option value="">Todos</option></select>
+          </div>
+          <div class="field">
+            <label for="fArea">Área</label>
+            <select id="fArea"><option value="">Todas</option></select>
+          </div>
+          <div class="field">
+            <label for="fPasillo">Pasillo</label>
+            <select id="fPasillo"><option value="">Todos</option></select>
+          </div>
+          <div class="field">
+            <label for="fUsuario">Usuario</label>
+            <input type="text" id="fUsuario" placeholder="Buscar ID de usuario…">
+          </div>
+        </div>
+        <div class="coverage-note" id="coverageNote"></div>
+      </div>
+    </div>
 
-        const PickerView = ({ user, pasillo, initialDelivery, onExitAisle }) => {
-            const [delivery, setDelivery] = React.useState(initialDelivery);
-            const [loading, setLoading] = React.useState(false);
-            const [copied, setCopied] = React.useState(false);
-            const [stats, setStats] = React.useState({ entregas: 0, umbs: 0 });
+    <div class="panel">
+      <div class="panel-head">
+        <h3 id="chartTitle">Promedio de productividad por hora del día</h3>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap" id="hourChart"></div>
+      </div>
+    </div>
 
-            const fetchStats = async () => {
-                try {
-                    const res = await apiCall('getPickerStats', { numEmpleado: user.numEmpleado });
-                    if (res.success) setStats(res.stats);
-                } catch(e) {}
-            };
+    <div class="panel">
+      <div class="panel-head">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="hourly">Detalle por hora</button>
+          <button class="tab-btn" data-tab="daily">Resumen diario</button>
+        </div>
+        <button class="btn" id="exportCsv">Exportar CSV</button>
+      </div>
+      <div class="panel-body">
 
-            const fetchNext = async () => {
-                setLoading(true); setCopied(false);
-                try {
-                    const res = await apiCall('getNextDelivery', { pasillo, numEmpleado: user.numEmpleado });
-                    if (res.success) {
-                        setDelivery(res.delivery);
-                        localStorage.setItem('rf_current_delivery', JSON.stringify(res.delivery));
-                    } else {
-                        alert(res.message); setDelivery(null); localStorage.removeItem('rf_current_delivery');
-                    }
-                } catch (e) { alert("Error de red."); }
-                setLoading(false);
-            };
+        <div class="tab-panel active" id="tab-hourly">
+          <div class="table-wrap">
+            <table id="hourlyTable">
+              <thead>
+                <tr>
+                  <th data-key="fecha">Fecha<span class="arrow"></span></th>
+                  <th data-key="hour">Hora<span class="arrow"></span></th>
+                  <th data-key="usuario">Usuario<span class="arrow"></span></th>
+                  <th data-key="pasillo">Pasillo (moda)<span class="arrow"></span></th>
+                  <th data-key="supervisor">Supervisor<span class="arrow"></span></th>
+                  <th data-key="area">Área<span class="arrow"></span></th>
+                  <th data-key="piezas">Piezas<span class="arrow"></span></th>
+                  <th data-key="objetivo">Objetivo/hr<span class="arrow"></span></th>
+                  <th data-key="pct">% Productividad<span class="arrow"></span></th>
+                </tr>
+              </thead>
+              <tbody id="hourlyBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="hourlyPagination"></div>
+        </div>
 
-            const handleCopy = () => { if(delivery) { copyToClipboard(delivery.entrega); setCopied(true); } };
+        <div class="tab-panel" id="tab-daily">
+          <div class="table-wrap">
+            <table id="dailyTable">
+              <thead>
+                <tr>
+                  <th data-key="fecha">Fecha<span class="arrow"></span></th>
+                  <th data-key="usuario">Usuario<span class="arrow"></span></th>
+                  <th data-key="horas">Horas activas<span class="arrow"></span></th>
+                  <th data-key="piezas">Piezas totales<span class="arrow"></span></th>
+                  <th data-key="objetivo">Objetivo total<span class="arrow"></span></th>
+                  <th data-key="pct">% Productividad día<span class="arrow"></span></th>
+                </tr>
+              </thead>
+              <tbody id="dailyBody"></tbody>
+            </table>
+          </div>
+          <div class="pagination" id="dailyPagination"></div>
+        </div>
 
-            const handleNext = async () => {
-                if(delivery) {
-                    setLoading(true);
-                    try {
-                        await apiCall('completeDelivery', { numEmpleado: user.numEmpleado, ...delivery });
-                        await fetchStats();
-                        await fetchNext();
-                    } catch (e) { alert("Error guardando progreso."); setLoading(false); }
-                }
-            };
+      </div>
+    </div>
 
-            const handleFinishAndExit = async () => {
-                if(delivery) {
-                    setLoading(true);
-                    try {
-                        await apiCall('completeDelivery', { numEmpleado: user.numEmpleado, ...delivery });
-                        onExitAisle(); 
-                    } catch (e) { alert("Error al finalizar."); setLoading(false); }
-                }
-            };
+  </div>
+</main>
 
-            React.useEffect(() => { 
-                fetchStats();
-                if(!delivery) fetchNext(); 
-            }, []);
+<div id="toast"></div>
 
-            if (loading && !delivery) {
-                return (
-                    <div className="min-h-screen flex items-center justify-center bg-gray-100 flex-col">
-                        <i className="ph ph-spinner ph-spin text-6xl text-blue-600 mb-4"></i>
-                        <h2 className="text-2xl font-bold text-gray-600">BUSCANDO ENTREGAS...</h2>
-                    </div>
-                );
-            }
+<footer>
+  Pasillo = primeros 2 dígitos de "Ubic.proced." · Hora = columna "Hora" sin minutos · Objetivo = "piezas por hr" de la hoja Objetivo para el pasillo que más se repite en esa hora.
+</footer>
 
-            if (!delivery) {
-                return (
-                    <div className="min-h-screen flex flex-col p-4 bg-gray-100 justify-center">
-                        <div className="card-rf text-center bg-green-50 border-green-200 border-4">
-                            <i className="ph ph-check-circle text-8xl text-green-500 mb-4"></i>
-                            <h2 className="text-4xl font-black text-green-700 mb-4">PASILLO LIMPIO</h2>
-                            <p className="text-xl text-gray-600 mb-8">No hay entregas pendientes en {pasillo}.</p>
-                            <button onClick={fetchNext} className="btn-rf btn-primary mb-4"><i className="ph ph-arrows-clockwise"></i> ACTUALIZAR</button>
-                            <button onClick={onExitAisle} className="btn-rf btn-warning"><i className="ph ph-swap"></i> CAMBIAR PASILLO</button>
-                        </div>
-                    </div>
-                );
-            }
+<script>
+(function(){
+  "use strict";
 
-            return (
-                <div className="min-h-screen flex flex-col bg-gray-100">
-                    <div className="bg-gray-800 text-white p-3 flex justify-between items-center shadow-md">
-                        <div>
-                            <div className="text-xl font-bold">PASILLO: <span className="text-yellow-400 text-2xl">{pasillo}</span></div>
-                            <div className="text-sm text-gray-300 mt-1">
-                                Turno: <span className="font-bold text-green-400">{stats.entregas}</span> Entregas | <span className="font-bold text-blue-400">{stats.umbs}</span> UMB
-                            </div>
-                        </div>
-                        <button onClick={onExitAisle} className="bg-gray-600 px-3 py-2 rounded text-sm font-bold">SALIR</button>
-                    </div>
+  // ---------------- State ----------------
+  let hourlyGroups = [];   // one row per usuario+fecha+hour
+  let dailyGroups = [];    // one row per usuario+fecha
+  let objMap = {};         // pasillo(number) -> {piezasHr, supervisor, area}
+  let unmatchedCount = 0;
+  let totalGroupCount = 0;
 
-                    <div className="flex-1 p-4 flex flex-col justify-center gap-4">
-                        <div className="card-rf bg-blue-50 border-blue-200 border-4 relative">
-                            <div className="text-sm text-blue-800 font-bold mb-1">ENTREGA</div>
-                            <div className="text-5xl font-black text-blue-900 tracking-wider text-center">{delivery.entrega}</div>
-                            {copied && <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded font-bold animate-pulse">COPIADO!</div>}
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="card-rf text-center bg-yellow-50 border-yellow-200 border-4 p-4">
-                                <div className="text-sm text-yellow-800 font-bold mb-1">BAHÍA</div>
-                                <div className="text-5xl font-black text-yellow-900">{delivery.bahia}</div>
-                            </div>
-                            <div className="card-rf text-center bg-purple-50 border-purple-200 border-4 p-4">
-                                <div className="text-sm text-purple-800 font-bold mb-1">CANTIDAD</div>
-                                <div className="text-5xl font-black text-purple-900">{delivery.ctdUMB} <span className="text-lg">UMB</span></div>
-                            </div>
-                        </div>
-                    </div>
+  let hourlySort = { key:'fecha', dir:1 };
+  let dailySort = { key:'fecha', dir:1 };
+  let hourlyPage = 1, dailyPage = 1;
+  const PAGE_SIZE = 40;
 
-                    <div className="p-4 bg-white border-t-2 border-gray-200 flex flex-col gap-3">
-                        {!copied ? (
-                            <button onClick={handleCopy} className="btn-rf btn-primary py-6 text-2xl">
-                                <i className="ph ph-copy"></i> COPIAR ENTREGA
-                            </button>
-                        ) : (
-                            <>
-                                <button onClick={handleNext} disabled={loading} className={`btn-rf btn-success py-6 text-2xl ${loading ? 'opacity-50' : ''}`}>
-                                    {loading ? <i className="ph ph-spinner ph-spin"></i> : <i className="ph ph-check-square-offset"></i>} 
-                                    SIGUIENTE ENTREGA
-                                </button>
-                                <button onClick={handleFinishAndExit} disabled={loading} className={`btn-rf bg-gray-800 text-white py-4 text-xl ${loading ? 'opacity-50' : ''}`}>
-                                    <i className="ph ph-flag-checkered"></i> FINALIZAR TURNO
-                                </button>
-                            </>
-                        )}
-                    </div>
-                </div>
-            );
-        };
+  // ---------------- Helpers ----------------
+  function isDateLike(v){
+    return v && typeof v === 'object' && typeof v.getHours === 'function' && typeof v.getFullYear === 'function';
+  }
 
-        // ==========================================
-        // VISTAS SUPERUSUARIO (DASHBOARD Y USUARIOS)
-        // ==========================================
-        const UserManagement = () => {
-            const [users, setUsers] = React.useState([]);
-            const [loading, setLoading] = React.useState(true);
-            const [showModal, setShowModal] = React.useState(false);
-            const [editingUser, setEditingUser] = React.useState(null);
-            
-            const [numEmpleado, setNumEmpleado] = React.useState('');
-            const [nombre, setNombre] = React.useState('');
-            const [rol, setRol] = React.useState('Pickeador');
-            const [password, setPassword] = React.useState('');
+  function parseHour(horaVal){
+    if (isDateLike(horaVal)) return horaVal.getHours();
+    if (typeof horaVal === 'number'){
+      // excel time fraction of a day
+      const totalMinutes = Math.round(horaVal * 24 * 60);
+      return Math.floor((totalMinutes / 60)) % 24;
+    }
+    if (typeof horaVal === 'string'){
+      const s = horaVal.trim().toLowerCase().replace(/\./g,'');
+      const m = s.match(/^(\d{1,2}):(\d{2}):?(\d{2})?\s*(a\s?m|p\s?m|am|pm)?/);
+      if (!m) return null;
+      let h = parseInt(m[1],10);
+      const ampm = m[4] ? m[4].replace(/\s+/g,'') : null;
+      if (ampm){
+        if (ampm.startsWith('a')){ if (h === 12) h = 0; }
+        else { if (h !== 12) h += 12; }
+      }
+      if (isNaN(h)) return null;
+      return h;
+    }
+    return null;
+  }
 
-            const loadUsers = async () => {
-                setLoading(true);
-                try {
-                    const res = await apiCall('getUsers');
-                    if(res.success) setUsers(res.users);
-                } catch(e) {}
-                setLoading(false);
-            };
+  function pasilloFromUbic(ubic){
+    if (ubic === null || ubic === undefined) return null;
+    const m = String(ubic).trim().match(/^(\d{2})/);
+    return m ? parseInt(m[1],10) : null;
+  }
 
-            React.useEffect(() => { loadUsers(); }, []);
+  function fechaKeyOf(fechaVal){
+    if (isDateLike(fechaVal)){
+      const y = fechaVal.getFullYear();
+      const mo = String(fechaVal.getMonth()+1).padStart(2,'0');
+      const d = String(fechaVal.getDate()).padStart(2,'0');
+      return `${y}-${mo}-${d}`;
+    }
+    if (typeof fechaVal === 'string') return fechaVal.trim();
+    return String(fechaVal);
+  }
 
-            const handleSave = async (e) => {
-                e.preventDefault();
-                setLoading(true);
-                const payload = {
-                    user: { numEmpleado, originalNumEmpleado: editingUser ? editingUser.NumeroEmpleado : null, nombre, rol, passwordHash: password ? hashPassword(password) : null }
-                };
-                try {
-                    const res = await apiCall(editingUser ? 'updateUser' : 'createUser', payload);
-                    if(res.success) { setShowModal(false); loadUsers(); } else alert(res.message);
-                } catch(e) { alert("Error al guardar"); }
-                setLoading(false);
-            };
+  function normalizeId(v){
+    const s = String(v).trim();
+    return /^\d+\.0$/.test(s) ? s.slice(0, -2) : s;
+  }
 
-            const handleToggleStatus = async (numEmp) => {
-                if(!confirm("¿Cambiar el estado de este usuario?")) return;
-                setLoading(true);
-                try { await apiCall('toggleUserStatus', { numEmpleado: numEmp }); loadUsers(); } catch(e) {}
-                setLoading(false);
-            };
+  function fmtInt(n){ return new Intl.NumberFormat('es-MX').format(Math.round(n)); }
+  function fmtPct(n){ return n===null || n===undefined || !isFinite(n) ? '—' : n.toFixed(1)+'%'; }
+  function pctClass(n){
+    if (n===null || n===undefined || !isFinite(n)) return 'na';
+    if (n>=100) return 'ok';
+    if (n>=80) return 'warn';
+    return 'bad';
+  }
+  // Minimal RFC4180 CSV parser. Used instead of XLSX.read(text,{type:'string'}) for
+  // Google Sheets CSV exports, because SheetJS's CSV type-guessing misreads
+  // dd/mm/yyyy text (e.g. "01/07/2026") as a US-style m/d/y serial date. Keeping
+  // every value as a raw string avoids that ambiguity entirely.
+  function parseCsvToRows(text){
+    const rows = [];
+    let i = 0, field = '', row = [], inQuotes = false;
+    const len = text.length;
+    while (i < len){
+      const c = text[i];
+      if (inQuotes){
+        if (c === '"'){
+          if (text[i+1] === '"'){ field += '"'; i += 2; continue; }
+          inQuotes = false; i++; continue;
+        }
+        field += c; i++; continue;
+      } else {
+        if (c === '"'){ inQuotes = true; i++; continue; }
+        if (c === ','){ row.push(field); field = ''; i++; continue; }
+        if (c === '\r'){ i++; continue; }
+        if (c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; i++; continue; }
+        field += c; i++; continue;
+      }
+    }
+    if (field.length > 0 || row.length > 0){ row.push(field); rows.push(row); }
+    if (!rows.length) return [];
+    const header = rows[0].map(h => h.trim());
+    const out = [];
+    for (let r = 1; r < rows.length; r++){
+      const rr = rows[r];
+      if (rr.length === 1 && rr[0].trim() === '') continue;
+      const obj = {};
+      header.forEach((h,idx) => {
+        const v = rr[idx];
+        obj[h] = (v === undefined || v === '') ? null : v;
+      });
+      out.push(obj);
+    }
+    return out;
+  }
 
-            const openModal = (u = null) => {
-                setEditingUser(u); setNumEmpleado(u ? u.NumeroEmpleado : ''); setNombre(u ? u.Nombre : ''); setRol(u ? u.Rol : 'Pickeador'); setPassword(''); setShowModal(true);
-            };
+  function findKey(row, candidates){
+    const keys = Object.keys(row);
+    for (const c of candidates){
+      const hit = keys.find(k => k.trim().toLowerCase() === c.toLowerCase());
+      if (hit) return hit;
+    }
+    return null;
+  }
 
-            return (
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-bold text-gray-700 text-xl">Gestión de Usuarios</h3>
-                        <button onClick={() => openModal()} className="bg-blue-600 text-white px-4 py-2 rounded font-bold flex items-center gap-2">
-                            <i className="ph ph-plus-circle text-xl"></i> Nuevo Usuario
-                        </button>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-gray-100 text-gray-600 text-sm">
-                                    <th className="p-3 border-b">No. Emp</th><th className="p-3 border-b">Nombre</th>
-                                    <th className="p-3 border-b">Rol</th><th className="p-3 border-b">Estado</th><th className="p-3 border-b text-right">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {users.map((u, idx) => (
-                                    <tr key={idx} className="border-b hover:bg-gray-50">
-                                        <td className="p-3 font-bold">{u.NumeroEmpleado}</td><td className="p-3">{u.Nombre}</td>
-                                        <td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${u.Rol.toUpperCase() === 'SUPERUSUARIO' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>{u.Rol}</span></td>
-                                        <td className="p-3"><span className={`px-2 py-1 rounded text-xs font-bold ${u.Activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{u.Activo ? 'ACTIVO' : 'INACTIVO'}</span></td>
-                                        <td className="p-3 text-right flex justify-end gap-2">
-                                            <button onClick={() => openModal(u)} className="p-2 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"><i className="ph ph-pencil-simple text-lg"></i></button>
-                                            <button onClick={() => handleToggleStatus(u.NumeroEmpleado)} className={`p-2 rounded ${u.Activo ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}><i className={`ph ${u.Activo ? 'ph-x-circle' : 'ph-check-circle'} text-lg`}></i></button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    {showModal && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                            <form onSubmit={handleSave} className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl">
-                                <h2 className="text-2xl font-bold mb-4">{editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}</h2>
-                                <div className="space-y-4">
-                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">No. Empleado</label><input type="number" required value={numEmpleado} onChange={e=>setNumEmpleado(e.target.value)} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" /></div>
-                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">Nombre Completo</label><input type="text" required value={nombre} onChange={e=>setNombre(e.target.value)} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" /></div>
-                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">Rol</label><select value={rol} onChange={e=>setRol(e.target.value)} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none"><option value="Pickeador">Pickeador</option><option value="Superusuario">Superusuario</option></select></div>
-                                    <div><label className="block text-sm font-bold text-gray-700 mb-1">Contraseña {editingUser && '(Dejar en blanco para no cambiar)'}</label><input type="password" required={!editingUser} value={password} onChange={e=>setPassword(e.target.value)} className="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" /></div>
-                                </div>
-                                <div className="flex justify-end gap-3 mt-6">
-                                    <button type="button" onClick={()=>setShowModal(false)} className="px-4 py-2 text-gray-600 font-bold hover:bg-gray-100 rounded">Cancelar</button>
-                                    <button type="submit" disabled={loading} className="px-4 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700">{loading ? 'Guardando...' : 'Guardar'}</button>
-                                </div>
-                            </form>
-                        </div>
-                    )}
-                </div>
-            );
-        };
+  // ---------------- File loading ----------------
+  const fileInput = document.getElementById('fileInput');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const dropzoneBtn = document.getElementById('dropzoneBtn');
+  const changeFileBtn = document.getElementById('changeFileBtn');
+  const connectBtn = document.getElementById('connectBtn');
+  const connectBack = document.getElementById('connectBack');
+  const connectSubmit = document.getElementById('connectSubmit');
+  const connectPanel = document.getElementById('connectPanel');
+  const connectError = document.getElementById('connectError');
+  const urlBaseInput = document.getElementById('urlBase');
+  const urlObjetivoInput = document.getElementById('urlObjetivo');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const liveBadge = document.getElementById('liveBadge');
+  const dropzone = document.getElementById('dropzone');
+  const dashboard = document.getElementById('dashboard');
+  const errorBox = document.getElementById('errorBox');
+  const fileNameEl = document.getElementById('fileName');
 
-        const DashboardView = ({ onLogout }) => {
-            const [data, setData] = React.useState(null);
-            const [loading, setLoading] = React.useState(true);
-            const [activeTab, setActiveTab] = React.useState('dashboard');
-            
-            const chartDonutRef = React.useRef(null);
-            const chartBarRef = React.useRef(null);
-            
-            const donutInstance = React.useRef(null);
-            const barInstance = React.useRef(null);
+  const LS_KEY = 'productividad_picking_gsheet_urls';
 
-            const loadData = async () => {
-                setLoading(true);
-                try {
-                    const res = await apiCall('getDashboardData');
-                    if(res.success) setData(res.data);
-                } catch(e) {}
-                setLoading(false);
-            };
+  uploadBtn.addEventListener('click', () => fileInput.click());
+  dropzoneBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
 
-            React.useEffect(() => {
-                if(activeTab === 'dashboard') {
-                    loadData();
-                    const interval = setInterval(loadData, 60000);
-                    return () => clearInterval(interval);
-                }
-            }, [activeTab]);
+  changeFileBtn.addEventListener('click', () => {
+    dashboard.style.display = 'none';
+    liveBadge.style.display = 'none';
+    refreshBtn.style.display = 'none';
+    changeFileBtn.style.display = 'none';
+    fileNameEl.textContent = '';
+    dropzone.style.display = 'block';
+    errorBox.style.display = 'none';
+  });
 
-            React.useEffect(() => {
-                // Initialize Donut Chart
-                if(data && chartDonutRef.current && activeTab === 'dashboard') {
-                    if(donutInstance.current) donutInstance.current.destroy();
-                    donutInstance.current = new Chart(chartDonutRef.current.getContext('2d'), {
-                        type: 'doughnut',
-                        data: {
-                            labels: ['Pendientes', 'Asignadas', 'Terminadas'],
-                            datasets: [{ 
-                                data: [data.totales.pendientes, data.totales.asignadas, data.totales.terminadas], 
-                                backgroundColor: ['#ef4444', '#3b82f6', '#22c55e'], 
-                                borderWidth: 0 
-                            }]
-                        },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-                    });
-                }
-                
-                // Initialize Bar Chart
-                if(data && chartBarRef.current && activeTab === 'dashboard' && data.avancePasillos) {
-                    if(barInstance.current) barInstance.current.destroy();
-                    const pasillosLabels = data.avancePasillos.map(p => p.pasillo);
-                    barInstance.current = new Chart(chartBarRef.current.getContext('2d'), {
-                        type: 'bar',
-                        data: {
-                            labels: pasillosLabels,
-                            datasets: [
-                                { label: 'Terminadas', data: data.avancePasillos.map(p => p.terminadas), backgroundColor: '#22c55e' },
-                                { label: 'Asignadas', data: data.avancePasillos.map(p => p.asignadas), backgroundColor: '#3b82f6' },
-                                { label: 'Pendientes', data: data.avancePasillos.map(p => p.pendientes), backgroundColor: '#ef4444' }
-                            ]
-                        },
-                        options: { 
-                            responsive: true, 
-                            maintainAspectRatio: false, 
-                            scales: { x: { stacked: true }, y: { stacked: true } },
-                            plugins: { legend: { position: 'bottom' } }
-                        }
-                    });
-                }
-            }, [data, activeTab]);
+  connectBtn.addEventListener('click', () => {
+    dropzone.style.display = 'none';
+    connectPanel.style.display = 'block';
+    try{
+      const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+      if (saved.base) urlBaseInput.value = saved.base;
+      if (saved.obj) urlObjetivoInput.value = saved.obj;
+    } catch(e){}
+  });
+  connectBack.addEventListener('click', () => {
+    connectPanel.style.display = 'none';
+    dropzone.style.display = 'block';
+    connectError.style.display = 'none';
+  });
+  connectSubmit.addEventListener('click', () => {
+    const baseUrl = urlBaseInput.value.trim();
+    const objUrl = urlObjetivoInput.value.trim();
+    connectError.style.display = 'none';
+    if (!baseUrl || !objUrl){
+      connectError.style.display = 'block';
+      connectError.textContent = 'Pega las dos URLs (Base y Objetivo) antes de conectar.';
+      return;
+    }
+    loadFromUrls(baseUrl, objUrl, true);
+  });
+  refreshBtn.addEventListener('click', () => {
+    try{
+      const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+      if (saved.base && saved.obj) loadFromUrls(saved.base, saved.obj, false);
+    } catch(e){}
+  });
 
-            return (
-                <div className="min-h-screen bg-gray-100 flex flex-col">
-                    <div className="bg-gray-900 text-white p-4 flex justify-between items-center shadow-lg">
-                        <div className="text-xl font-bold flex items-center gap-2">
-                            <i className="ph ph-chart-line-up"></i> CONTROL TOWER WMS
-                        </div>
-                        <button onClick={onLogout} className="bg-red-600 px-4 py-2 rounded text-sm font-bold flex items-center gap-2">
-                            <i className="ph ph-power"></i> SALIR
-                        </button>
-                    </div>
+  ['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, e => {
+    e.preventDefault(); dropzone.classList.add('drag');
+  }));
+  ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => {
+    e.preventDefault(); dropzone.classList.remove('drag');
+  }));
+  dropzone.addEventListener('drop', e => {
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
 
-                    <div className="bg-white border-b flex px-6">
-                        <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-3 font-bold border-b-2 ${activeTab === 'dashboard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>
-                            <i className="ph ph-chart-pie-slice mr-2"></i> Dashboard
-                        </button>
-                        <button onClick={() => setActiveTab('usuarios')} className={`px-4 py-3 font-bold border-b-2 ${activeTab === 'usuarios' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>
-                            <i className="ph ph-users mr-2"></i> Gestión de Usuarios
-                        </button>
-                    </div>
+  function showError(msg){
+    errorBox.style.display = 'block';
+    errorBox.textContent = msg;
+  }
 
-                    <div className="p-6 flex-1 overflow-auto">
-                        {activeTab === 'dashboard' ? (
-                            loading && !data ? <div className="text-center p-10">Cargando Dashboard...</div> : (
-                            <>
-                                {/* KPIs */}
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                                    <div className="dashboard-card border-l-4 border-red-500">
-                                        <div className="text-gray-500 text-sm font-bold">PENDIENTES</div>
-                                        <div className="text-4xl font-black text-gray-800">{data?.totales?.pendientes || 0}</div>
-                                    </div>
-                                    <div className="dashboard-card border-l-4 border-blue-500">
-                                        <div className="text-gray-500 text-sm font-bold">ASIGNADAS</div>
-                                        <div className="text-4xl font-black text-gray-800">{data?.totales?.asignadas || 0}</div>
-                                    </div>
-                                    <div className="dashboard-card border-l-4 border-green-500">
-                                        <div className="text-gray-500 text-sm font-bold">TERMINADAS</div>
-                                        <div className="text-4xl font-black text-gray-800">{data?.totales?.terminadas || 0}</div>
-                                    </div>
-                                    <div className="dashboard-card border-l-4 border-purple-500">
-                                        <div className="text-gray-500 text-sm font-bold">PASILLOS ACTIVOS</div>
-                                        <div className="text-4xl font-black text-gray-800">{data?.totales?.pasillos || 0}</div>
-                                    </div>
-                                </div>
+  let toastTimer = null;
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 6000);
+  }
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    {/* Gráfico Donut */}
-                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 col-span-1 h-80 flex flex-col">
-                                        <h3 className="font-bold text-gray-700 mb-4">Estado Global</h3>
-                                        <div className="relative flex-1">
-                                            <canvas ref={chartDonutRef}></canvas>
-                                        </div>
-                                    </div>
+  function pickSheets(wb){
+    const baseSheetName = wb.SheetNames.find(n => n.trim().toLowerCase() === 'base') || wb.SheetNames[0];
+    const objSheetName = wb.SheetNames.find(n => n.trim().toLowerCase() === 'objetivo') || wb.SheetNames[1];
+    return { baseSheetName, objSheetName };
+  }
 
-                                    {/* Gráfico de Barras por Pasillo */}
-                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 col-span-2 h-80 flex flex-col">
-                                        <h3 className="font-bold text-gray-700 mb-4">Avance por Pasillo</h3>
-                                        <div className="relative flex-1">
-                                            <canvas ref={chartBarRef}></canvas>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div className="grid grid-cols-1 gap-6 mt-6">
-                                    {/* Ranking Pickers */}
-                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                                        <h3 className="font-bold text-gray-700 mb-4">Top 10 Pickers (Terminadas)</h3>
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left">
-                                                <thead>
-                                                    <tr className="bg-gray-50 text-gray-600 text-sm">
-                                                        <th className="p-3 rounded-tl-lg">#</th>
-                                                        <th className="p-3">Empleado</th>
-                                                        <th className="p-3 text-right">Entregas</th>
-                                                        <th className="p-3 text-right rounded-tr-lg">Total UMB</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {data?.topPickers?.map((p, idx) => (
-                                                        <tr key={idx} className="border-b border-gray-50">
-                                                            <td className="p-3 font-bold text-gray-400">{idx+1}</td>
-                                                            <td className="p-3 font-semibold text-gray-800">{p.user}</td>
-                                                            <td className="p-3 text-right font-bold text-blue-600">{p.entregas}</td>
-                                                            <td className="p-3 text-right text-purple-600">{p.umbs}</td>
-                                                        </tr>
-                                                    ))}
-                                                    {(!data?.topPickers || data?.topPickers.length === 0) && <tr><td colSpan="4" className="text-center p-4 text-gray-500">Sin datos de productividad</td></tr>}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
+  function activateDashboard(){
+    dropzone.style.display = 'none';
+    connectPanel.style.display = 'none';
+    dashboard.style.display = 'block';
+    changeFileBtn.style.display = 'inline-block';
+  }
 
-                                    {/* Avance por Supervisor */}
-                                    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                                        <h3 className="font-bold text-gray-700 mb-4">Avance por Supervisor</h3>
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left">
-                                                <thead>
-                                                    <tr className="bg-gray-50 text-gray-600 text-sm">
-                                                        <th className="p-3">Supervisor</th>
-                                                        <th className="p-3 text-right">Pendientes</th>
-                                                        <th className="p-3 text-right">Asignadas</th>
-                                                        <th className="p-3 text-right">Terminadas</th>
-                                                        <th className="p-3 text-right text-purple-600">UMB Terminadas</th>
-                                                        <th className="p-3 text-center">Progreso</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {data?.avanceSupervisores?.map((s, idx) => {
-                                                        const percent = s.total > 0 ? Math.round((s.terminadas / s.total) * 100) : 0;
-                                                        return (
-                                                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50">
-                                                            <td className="p-3 font-semibold text-gray-800">{s.supervisor}</td>
-                                                            <td className="p-3 text-right text-red-500 font-bold">{s.pendientes}</td>
-                                                            <td className="p-3 text-right text-blue-500 font-bold">{s.asignadas}</td>
-                                                            <td className="p-3 text-right text-green-500 font-bold">{s.terminadas}</td>
-                                                            <td className="p-3 text-right text-purple-600 font-bold">{s.umbs}</td>
-                                                            <td className="p-3">
-                                                                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                                                  <div className="bg-green-500 h-2.5 rounded-full" style={{width: `${percent}%`}}></div>
-                                                                </div>
-                                                                <div className="text-xs text-center mt-1 text-gray-500">{percent}% completado</div>
-                                                            </td>
-                                                        </tr>
-                                                    )})}
-                                                    {(!data?.avanceSupervisores || data?.avanceSupervisores.length === 0) && <tr><td colSpan="6" className="text-center p-4 text-gray-500">Sin datos de supervisores</td></tr>}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                </div>
-                            </>
-                            )
-                        ) : (
-                            <UserManagement />
-                        )}
-                    </div>
-                </div>
-            );
-        };
+  function handleFile(file){
+    errorBox.style.display = 'none';
+    fileNameEl.textContent = file.name;
+    liveBadge.style.display = 'none';
+    refreshBtn.style.display = 'none';
+    const reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type:'array', cellDates:true });
+        const { baseSheetName, objSheetName } = pickSheets(wb);
+        if (!baseSheetName || !objSheetName){
+          showError('No se encontraron las hojas "Base" y "Objetivo" en el archivo.');
+          return;
+        }
+        const baseRows = XLSX.utils.sheet_to_json(wb.Sheets[baseSheetName], { defval:null });
+        const objRows = XLSX.utils.sheet_to_json(wb.Sheets[objSheetName], { defval:null });
+        if (!baseRows.length){ showError('La hoja Base está vacía o no se pudo leer.'); return; }
+        buildModel(baseRows, objRows);
+        activateDashboard();
+      } catch(err){
+        console.error(err);
+        showError('No se pudo leer el archivo. Verifica que sea el Excel exportado de la hoja de cálculo (' + err.message + ')');
+      }
+    };
+    reader.onerror = function(){ showError('Error al leer el archivo.'); };
+    reader.readAsArrayBuffer(file);
+  }
 
-        const App = () => {
-            const [user, setUser] = React.useState(null);
-            const [pasillo, setPasillo] = React.useState(null);
-            const [delivery, setDelivery] = React.useState(null);
-            const [init, setInit] = React.useState(false);
+  function loadFromUrls(baseUrl, objUrl, isFirstConnect){
+    connectError.style.display = 'none';
+    if (isFirstConnect){
+      connectSubmit.disabled = true;
+      connectSubmit.textContent = 'Conectando…';
+    } else {
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = 'Actualizando…';
+    }
+    const bust = (u) => u + (u.includes('?') ? '&' : '?') + '_ts=' + Date.now();
+    Promise.all([
+      fetch(bust(baseUrl)).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' al leer la hoja Base'); return r.text(); }),
+      fetch(bust(objUrl)).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status + ' al leer la hoja Objetivo'); return r.text(); }),
+    ]).then(([baseCsv, objCsv]) => {
+      if (/^\s*<(!doctype|html)/i.test(baseCsv) || /^\s*<(!doctype|html)/i.test(objCsv)){
+        throw new Error('Google devolvió una página de acceso, no el CSV. Revisa que el enlace comparta "Cualquier persona con el enlace - Lector".');
+      }
+      const baseRows = parseCsvToRows(baseCsv);
+      const objRows = parseCsvToRows(objCsv);
+      if (!baseRows.length) throw new Error('La hoja Base llegó vacía.');
+      buildModel(baseRows, objRows);
+      activateDashboard();
+      fileNameEl.textContent = 'Google Sheets';
+      liveBadge.style.display = 'inline';
+      refreshBtn.style.display = 'inline-block';
+      try{ localStorage.setItem(LS_KEY, JSON.stringify({ base: baseUrl, obj: objUrl })); } catch(e){}
+    }).catch(err => {
+      console.error(err);
+      if (isFirstConnect){
+        connectError.style.display = 'block';
+        connectError.textContent = 'No se pudo conectar: ' + err.message;
+      } else {
+        showToast('No se pudo actualizar desde Google Sheets: ' + err.message);
+      }
+    }).finally(() => {
+      connectSubmit.disabled = false;
+      connectSubmit.textContent = 'Conectar y cargar';
+      refreshBtn.disabled = false;
+      refreshBtn.textContent = 'Actualizar';
+    });
+  }
 
-            React.useEffect(() => {
-                if(localStorage.getItem('rf_user')) setUser(JSON.parse(localStorage.getItem('rf_user')));
-                if(localStorage.getItem('rf_pasillo')) setPasillo(localStorage.getItem('rf_pasillo'));
-                if(localStorage.getItem('rf_current_delivery')) setDelivery(JSON.parse(localStorage.getItem('rf_current_delivery')));
-                setInit(true);
-            }, []);
+  // ---------------- Model building ----------------
+  function buildModel(baseRows, objRows){
+    const sample = baseRows[0];
+    const kUsuario = findKey(sample, ['Usuarios']);
+    const kFecha = findKey(sample, ['Fecha actual']);
+    const kHora = findKey(sample, ['Hora']);
+    const kUbic = findKey(sample, ['Ubic.proced.','Ubic.proced']);
+    const kPiezas = findKey(sample, ["Ctd.real dest.","Ctd.real dest"]);
 
-            const handleLogin = (u) => { setUser(u); localStorage.setItem('rf_user', JSON.stringify(u)); };
-            const handleLogout = () => { setUser(null); setPasillo(null); setDelivery(null); localStorage.clear(); };
-            const handleSelectPasillo = (p) => { setPasillo(p); localStorage.setItem('rf_pasillo', p); };
-            const handleExitPasillo = () => { setPasillo(null); setDelivery(null); localStorage.removeItem('rf_pasillo'); localStorage.removeItem('rf_current_delivery'); };
+    const objSample = objRows[0] || {};
+    const kPasillo = findKey(objSample, ['Pasillo']);
+    const kPiezasHr = findKey(objSample, ['piezas por hr']);
+    const kSupervisor = findKey(objSample, ['Supervisor']);
+    const kArea = findKey(objSample, ['Area','Área']);
 
-            if (!init) return <div className="min-h-screen bg-gray-900 flex items-center justify-center"><h1 className="text-white font-bold">INICIANDO...</h1></div>;
-            if (!user) return <LoginScreen onLogin={handleLogin} />;
-            if (user.rol.toUpperCase() === 'SUPERUSUARIO' || user.rol.toUpperCase() === 'ADMIN') return <DashboardView onLogout={handleLogout} />;
-            if (!pasillo) return <AisleSelector onSelect={handleSelectPasillo} onLogout={handleLogout} />;
-            return <PickerView user={user} pasillo={pasillo} initialDelivery={delivery} onExitAisle={handleExitPasillo} />;
-        };
+    objMap = {};
+    objRows.forEach(r => {
+      if (!kPasillo) return;
+      const pas = r[kPasillo];
+      if (pas === null || pas === undefined || pas === '') return;
+      objMap[Number(pas)] = {
+        piezasHr: kPiezasHr ? Number(r[kPiezasHr]) : null,
+        supervisor: (kSupervisor && r[kSupervisor]) ? String(r[kSupervisor]).trim() : null,
+        area: (kArea && r[kArea]) ? String(r[kArea]).trim() : null,
+      };
+    });
 
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-    </script>
+    // group by usuario+fecha+hour
+    const groups = {};
+    baseRows.forEach(r => {
+      let usuario = kUsuario ? r[kUsuario] : null;
+      if (usuario === null || usuario === undefined || usuario === '') return;
+      usuario = normalizeId(usuario);
+      const fechaKey = kFecha ? fechaKeyOf(r[kFecha]) : 'N/D';
+      const hour = kHora ? parseHour(r[kHora]) : null;
+      const pasillo = kUbic ? pasilloFromUbic(r[kUbic]) : null;
+      const piezas = kPiezas ? (Number(r[kPiezas]) || 0) : 0;
+      const key = usuario + '|' + fechaKey + '|' + hour;
+      if (!groups[key]){
+        groups[key] = { usuario:String(usuario), fecha:fechaKey, hour:hour, piezas:0, pasilloCounts:{} };
+      }
+      groups[key].piezas += piezas;
+      if (pasillo !== null){
+        groups[key].pasilloCounts[pasillo] = (groups[key].pasilloCounts[pasillo]||0) + 1;
+      }
+    });
+
+    hourlyGroups = [];
+    unmatchedCount = 0;
+    Object.values(groups).forEach(g => {
+      let modePasillo = null, modeCount = -1;
+      Object.entries(g.pasilloCounts).forEach(([p,c]) => {
+        if (c > modeCount){ modeCount = c; modePasillo = Number(p); }
+      });
+      const target = modePasillo !== null ? objMap[modePasillo] : null;
+      const objetivoHr = target ? target.piezasHr : null;
+      const pct = (objetivoHr && objetivoHr > 0) ? (g.piezas / objetivoHr * 100) : null;
+      if (modePasillo === null || !target) unmatchedCount++;
+      hourlyGroups.push({
+        usuario:g.usuario, fecha:g.fecha, hour:g.hour,
+        pasillo:modePasillo, supervisor: target ? target.supervisor : null,
+        area: target ? target.area : null,
+        piezas:g.piezas, objetivo:objetivoHr, pct:pct
+      });
+    });
+    totalGroupCount = hourlyGroups.length;
+
+    // daily aggregation from hourlyGroups
+    const dailyMap = {};
+    hourlyGroups.forEach(h => {
+      const key = h.usuario + '|' + h.fecha;
+      if (!dailyMap[key]) dailyMap[key] = { usuario:h.usuario, fecha:h.fecha, piezas:0, objetivo:0, horas:0 };
+      dailyMap[key].piezas += h.piezas;
+      if (h.objetivo) dailyMap[key].objetivo += h.objetivo;
+      dailyMap[key].horas += 1;
+    });
+    dailyGroups = Object.values(dailyMap).map(d => ({
+      ...d, pct: d.objetivo > 0 ? (d.piezas / d.objetivo * 100) : null
+    }));
+
+    populateFilters();
+    hourlyPage = 1; dailyPage = 1;
+    renderAll();
+  }
+
+  // ---------------- Filters ----------------
+  const fFecha = document.getElementById('fFecha');
+  const fSupervisor = document.getElementById('fSupervisor');
+  const fArea = document.getElementById('fArea');
+  const fPasillo = document.getElementById('fPasillo');
+  const fUsuario = document.getElementById('fUsuario');
+  document.getElementById('clearFilters').addEventListener('click', () => {
+    fFecha.value=''; fSupervisor.value=''; fArea.value=''; fPasillo.value=''; fUsuario.value='';
+    hourlyPage=1; dailyPage=1; renderAll();
+  });
+  [fFecha,fSupervisor,fArea,fPasillo].forEach(el => el.addEventListener('change', () => { hourlyPage=1; dailyPage=1; renderAll(); }));
+  fUsuario.addEventListener('input', () => { hourlyPage=1; dailyPage=1; renderAll(); });
+
+  function populateFilters(){
+    const fechas = [...new Set(hourlyGroups.map(g=>g.fecha))].sort();
+    const supervisors = [...new Set(hourlyGroups.map(g=>g.supervisor).filter(Boolean))].sort();
+    const areas = [...new Set(hourlyGroups.map(g=>g.area).filter(Boolean))].sort();
+    const pasillos = [...new Set(hourlyGroups.map(g=>g.pasillo).filter(p=>p!==null))].sort((a,b)=>a-b);
+
+    fFecha.innerHTML = '<option value="">Todas</option>' + fechas.map(f=>`<option value="${f}">${f}</option>`).join('');
+    fSupervisor.innerHTML = '<option value="">Todos</option>' + supervisors.map(s=>`<option value="${s}">${s}</option>`).join('');
+    fArea.innerHTML = '<option value="">Todas</option>' + areas.map(a=>`<option value="${a}">${a}</option>`).join('');
+    fPasillo.innerHTML = '<option value="">Todos</option>' + pasillos.map(p=>`<option value="${p}">Pasillo ${p}</option>`).join('');
+
+    if (!supervisors.length){
+      fSupervisor.disabled = true;
+      fSupervisor.title = 'La hoja Objetivo no tiene la columna Supervisor llenada';
+    } else { fSupervisor.disabled = false; }
+    if (!areas.length){
+      fArea.disabled = true;
+      fArea.title = 'La hoja Objetivo no tiene la columna Área llenada';
+    } else { fArea.disabled = false; }
+  }
+
+  function filteredHourly(){
+    const fe = fFecha.value, su = fSupervisor.value, ar = fArea.value, pa = fPasillo.value, us = fUsuario.value.trim().toLowerCase();
+    return hourlyGroups.filter(g => {
+      if (fe && g.fecha !== fe) return false;
+      if (su && g.supervisor !== su) return false;
+      if (ar && g.area !== ar) return false;
+      if (pa && String(g.pasillo) !== pa) return false;
+      if (us && !g.usuario.toLowerCase().includes(us)) return false;
+      return true;
+    });
+  }
+  function filteredDaily(){
+    const fe = fFecha.value, us = fUsuario.value.trim().toLowerCase();
+    // supervisor/area/pasillo filters apply at hour granularity; derive matching usuario+fecha pairs
+    const allowedKeys = new Set(filteredHourly().map(g => g.usuario+'|'+g.fecha));
+    return dailyGroups.filter(d => {
+      if (fe && d.fecha !== fe) return false;
+      if (us && d.usuario.toLowerCase().includes(us) === false) return false;
+      if (!allowedKeys.has(d.usuario+'|'+d.fecha)) return false;
+      return true;
+    });
+  }
+
+  // ---------------- Rendering ----------------
+  function renderAll(){
+    const hData = filteredHourly();
+    const dData = filteredDaily();
+    renderKPIs(hData);
+    renderCoverage(hData);
+    renderChart(hData);
+    renderHourlyTable(hData);
+    renderDailyTable(dData);
+  }
+
+  function renderKPIs(hData){
+    const totalPiezas = hData.reduce((s,g)=>s+g.piezas,0);
+    const totalObjetivo = hData.reduce((s,g)=>s+(g.objetivo||0),0);
+    const pctGeneral = totalObjetivo>0 ? (totalPiezas/totalObjetivo*100) : null;
+    const usuarios = new Set(hData.map(g=>g.usuario)).size;
+    const dias = new Set(hData.map(g=>g.fecha)).size;
+
+    const cards = [
+      { label:'Piezas pickeadas', value:fmtInt(totalPiezas), sub:`${hData.length} bloques hora·usuario`, cls:'' },
+      { label:'% Productividad general', value:fmtPct(pctGeneral), sub:'piezas / objetivo', cls:pctClass(pctGeneral) },
+      { label:'Empleados en vista', value:usuarios, sub:'usuarios distintos', cls:'' },
+      { label:'Días cubiertos', value:dias, sub:'fechas distintas', cls:'' },
+    ];
+    document.getElementById('kpiRow').innerHTML = cards.map(c => `
+      <div class="kpi-card ${c.cls}">
+        <div class="label">${c.label}</div>
+        <div class="value">${c.value}</div>
+        <div class="sub">${c.sub}</div>
+      </div>`).join('');
+  }
+
+  function renderCoverage(hData){
+    const missing = hData.filter(g => g.objetivo===null || g.objetivo===undefined).length;
+    let note = `${totalGroupCount} bloques hora·usuario calculados en total.`;
+    if (unmatchedCount>0){
+      note += ` ${unmatchedCount} sin objetivo asignado (pasillo sin registro en la hoja Objetivo).`;
+    }
+    document.getElementById('coverageNote').textContent = note;
+  }
+
+  function renderChart(hData){
+    const byHour = {};
+    for (let h=0; h<24; h++) byHour[h] = { piezas:0, objetivo:0 };
+    hData.forEach(g => {
+      if (g.hour===null || g.hour===undefined) return;
+      byHour[g.hour].piezas += g.piezas;
+      byHour[g.hour].objetivo += (g.objetivo||0);
+    });
+    const hours = Object.keys(byHour).map(Number).filter(h => byHour[h].piezas>0 || byHour[h].objetivo>0);
+    const wrap = document.getElementById('hourChart');
+    if (!hours.length){ wrap.innerHTML = '<div style="color:var(--paper-faint);font-size:13px;">Sin datos para este filtro.</div>'; return; }
+    const pcts = hours.map(h => byHour[h].objetivo>0 ? (byHour[h].piezas/byHour[h].objetivo*100) : 0);
+    const maxPct = Math.max(100, ...pcts) * 1.1;
+    wrap.innerHTML = hours.map(h => {
+      const pct = byHour[h].objetivo>0 ? (byHour[h].piezas/byHour[h].objetivo*100) : null;
+      const barH = pct===null ? 2 : Math.max(2, (pct/maxPct*100));
+      const cls = pctClass(pct);
+      const color = cls==='ok' ? 'var(--on-target)' : cls==='warn' ? 'var(--warn)' : cls==='bad' ? 'var(--under-target)' : 'var(--steel-light)';
+      const targetLineTop = 100/maxPct*100;
+      return `<div class="chart-bar-col">
+        <div class="chart-bar-val">${pct===null?'—':Math.round(pct)+'%'}</div>
+        <div style="position:relative; width:100%; height:${barH}%; display:flex; align-items:flex-end;">
+          <div class="chart-bar" style="height:100%; background:${color};"></div>
+        </div>
+        <div class="chart-bar-label">${String(h).padStart(2,'0')}h</div>
+      </div>`;
+    }).join('');
+  }
+
+  // ---------------- Table sorting/pagination ----------------
+  document.querySelectorAll('#hourlyTable thead th').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      if (hourlySort.key===key) hourlySort.dir *= -1; else { hourlySort.key=key; hourlySort.dir=1; }
+      hourlyPage=1;
+      renderHourlyTable(filteredHourly());
+    });
+  });
+  document.querySelectorAll('#dailyTable thead th').forEach(th => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      if (dailySort.key===key) dailySort.dir *= -1; else { dailySort.key=key; dailySort.dir=1; }
+      dailyPage=1;
+      renderDailyTable(filteredDaily());
+    });
+  });
+
+  function sortRows(rows, sortState){
+    const {key,dir} = sortState;
+    return [...rows].sort((a,b) => {
+      let va=a[key], vb=b[key];
+      if (va===null||va===undefined) va = -Infinity;
+      if (vb===null||vb===undefined) vb = -Infinity;
+      if (typeof va === 'string') va = va.toLowerCase();
+      if (typeof vb === 'string') vb = vb.toLowerCase();
+      if (va<vb) return -1*dir;
+      if (va>vb) return 1*dir;
+      return 0;
+    });
+  }
+
+  function pasilloTag(p){
+    if (p===null || p===undefined) return '<span class="tag-none">—</span>';
+    return `<span class="tag-pasillo"><span class="l">PASILLO</span><span class="n">${p}</span></span>`;
+  }
+
+  function renderHourlyTable(hData){
+    const sorted = sortRows(hData, hourlySort);
+    const totalPages = Math.max(1, Math.ceil(sorted.length/PAGE_SIZE));
+    if (hourlyPage>totalPages) hourlyPage = totalPages;
+    const pageRows = sorted.slice((hourlyPage-1)*PAGE_SIZE, hourlyPage*PAGE_SIZE);
+    const body = document.getElementById('hourlyBody');
+    if (!pageRows.length){
+      body.innerHTML = '<tr class="empty-row"><td colspan="9">No hay registros para estos filtros.</td></tr>';
+    } else {
+      body.innerHTML = pageRows.map(g => `
+        <tr>
+          <td class="txt">${g.fecha}</td>
+          <td>${g.hour===null?'—':String(g.hour).padStart(2,'0')+':00'}</td>
+          <td class="txt">${g.usuario}</td>
+          <td>${pasilloTag(g.pasillo)}</td>
+          <td class="txt">${g.supervisor||'—'}</td>
+          <td class="txt">${g.area||'—'}</td>
+          <td>${fmtInt(g.piezas)}</td>
+          <td>${g.objetivo?fmtInt(g.objetivo):'—'}</td>
+          <td><span class="pct-badge ${pctClass(g.pct)}">${fmtPct(g.pct)}</span></td>
+        </tr>`).join('');
+    }
+    document.getElementById('hourlyPagination').innerHTML = paginationHtml(hourlyPage, totalPages, sorted.length, 'hourly');
+    document.getElementById('hourlyPagination').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      hourlyPage = Number(b.dataset.page);
+      renderHourlyTable(filteredHourly());
+    }));
+  }
+
+  function renderDailyTable(dData){
+    const sorted = sortRows(dData, dailySort);
+    const totalPages = Math.max(1, Math.ceil(sorted.length/PAGE_SIZE));
+    if (dailyPage>totalPages) dailyPage = totalPages;
+    const pageRows = sorted.slice((dailyPage-1)*PAGE_SIZE, dailyPage*PAGE_SIZE);
+    const body = document.getElementById('dailyBody');
+    if (!pageRows.length){
+      body.innerHTML = '<tr class="empty-row"><td colspan="6">No hay registros para estos filtros.</td></tr>';
+    } else {
+      body.innerHTML = pageRows.map(d => `
+        <tr>
+          <td class="txt">${d.fecha}</td>
+          <td class="txt">${d.usuario}</td>
+          <td>${d.horas}</td>
+          <td>${fmtInt(d.piezas)}</td>
+          <td>${d.objetivo?fmtInt(d.objetivo):'—'}</td>
+          <td><span class="pct-badge ${pctClass(d.pct)}">${fmtPct(d.pct)}</span></td>
+        </tr>`).join('');
+    }
+    document.getElementById('dailyPagination').innerHTML = paginationHtml(dailyPage, totalPages, sorted.length, 'daily');
+    document.getElementById('dailyPagination').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      dailyPage = Number(b.dataset.page);
+      renderDailyTable(filteredDaily());
+    }));
+  }
+
+  function paginationHtml(page, totalPages, total, prefix){
+    return `
+      <button data-page="1" ${page<=1?'disabled':''}>&laquo;</button>
+      <button data-page="${page-1}" ${page<=1?'disabled':''}>Anterior</button>
+      <span>Página ${page} de ${totalPages} · ${total} registros</span>
+      <button data-page="${page+1}" ${page>=totalPages?'disabled':''}>Siguiente</button>
+      <button data-page="${totalPages}" ${page>=totalPages?'disabled':''}>&raquo;</button>
+    `;
+  }
+
+  // ---------------- Tabs ----------------
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ---------------- CSV export ----------------
+  document.getElementById('exportCsv').addEventListener('click', () => {
+    const activeTab = document.querySelector('.tab-btn.active').dataset.tab;
+    let rows, header, mapper;
+    if (activeTab==='hourly'){
+      rows = sortRows(filteredHourly(), hourlySort);
+      header = ['Fecha','Hora','Usuario','Pasillo','Supervisor','Area','Piezas','Objetivo_hr','Pct_Productividad'];
+      mapper = g => [g.fecha, g.hour, g.usuario, g.pasillo??'', g.supervisor||'', g.area||'', g.piezas, g.objetivo??'', g.pct===null?'':g.pct.toFixed(1)];
+    } else {
+      rows = sortRows(filteredDaily(), dailySort);
+      header = ['Fecha','Usuario','Horas_activas','Piezas_totales','Objetivo_total','Pct_Productividad_dia'];
+      mapper = d => [d.fecha, d.usuario, d.horas, d.piezas, d.objetivo, d.pct===null?'':d.pct.toFixed(1)];
+    }
+    const csv = [header.join(',')].concat(rows.map(r => mapper(r).join(','))).join('\n');
+    const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `productividad_${activeTab}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+
+  // ---------------- Auto-connect on revisit ----------------
+  try{
+    const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    if (saved.base && saved.obj) loadFromUrls(saved.base, saved.obj, false);
+  } catch(e){}
+
+})();
+</script>
 </body>
 </html>
